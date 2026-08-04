@@ -1,4 +1,4 @@
-﻿# Milestone 7: Production deployment and operations
+# Milestone 7: Production deployment and operations
 
 ## Deployment boundary
 
@@ -67,9 +67,20 @@ Deploy, then update `COPILOT_CORS_ORIGINS` on Render to the exact Vercel product
 
 ## 5. Configure Windows desktop clients
 
-The desktop application must remain installed and running locally. Point its backend HTTP/WebSocket configuration at the Render URL while retaining the local capture helper and overlay. Do not deploy the Electron dashboard itself to Vercel: browser sandboxes cannot provide the existing transparent overlay and WASAPI behavior.
+The desktop application remains installed and running locally. Set the Electron main-process environment before launch:
 
-The backend `COPILOT_LOCAL_AUTH_TOKEN` and any corresponding desktop configuration must be distributed through a secure installation/configuration channel, not embedded in a public web bundle.
+```powershell
+$env:COPILOT_DESKTOP_ENVIRONMENT="production"
+$env:COPILOT_API_BASE_URL="https://YOUR_RENDER_SERVICE.onrender.com"
+$env:COPILOT_WS_URL="wss://YOUR_RENDER_SERVICE.onrender.com/ws"
+$env:COPILOT_LOCAL_AUTH_TOKEN="THE_MATCHING_RENDER_BACKEND_TOKEN"
+```
+
+`COPILOT_WS_URL` is optional and is derived from `COPILOT_API_BASE_URL` when omitted. Development defaults remain `http://127.0.0.1:8765` and `ws://127.0.0.1:8765/ws`. Production startup rejects non-HTTPS API URLs, non-WSS WebSocket URLs, embedded URL credentials, query strings, fragments, and unexpected paths.
+
+The renderer receives only safe runtime metadata such as the API base URL; the local authentication token remains in the Electron main process. Do not deploy the Electron dashboard itself to Vercel: browser sandboxes cannot provide the existing transparent overlay and WASAPI behavior.
+
+The backend `COPILOT_LOCAL_AUTH_TOKEN` and matching desktop value must be distributed through a secure installation/configuration channel, not embedded in a public web bundle. Installer-managed first-run provisioning remains a later milestone.
 
 ## Operational checks
 

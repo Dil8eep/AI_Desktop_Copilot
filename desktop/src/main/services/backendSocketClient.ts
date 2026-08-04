@@ -78,7 +78,7 @@ export class BackendSocketClient {
       throw new Error("A prompt is required to start a session.");
     }
     if (this.socket?.readyState !== WebSocket.OPEN) {
-      throw new Error("The local backend is not connected.");
+      throw new Error("The configured backend is not connected.");
     }
 
     const sessionId = randomUUID();
@@ -122,7 +122,7 @@ export class BackendSocketClient {
   }
   public sendScreenCapture(image: Uint8Array, mimeType: string): string {
     if (this.socket?.readyState !== WebSocket.OPEN) {
-      throw new Error("The local backend is not connected.");
+      throw new Error("The configured backend is not connected.");
     }
     const sessionId = randomUUID();
     this.sendBinaryEvent("screen.capture", sessionId, image, { mimeType });
@@ -151,7 +151,7 @@ export class BackendSocketClient {
     sessionId: string,
   ): void {
     if (this.socket?.readyState !== WebSocket.OPEN) {
-      throw new Error("The local backend is not connected.");
+      throw new Error("The configured backend is not connected.");
     }
     this.socket.send(
       JSON.stringify({
@@ -171,7 +171,7 @@ export class BackendSocketClient {
     payload: Record<string, string | number>,
   ): void {
     if (this.socket?.readyState !== WebSocket.OPEN) {
-      throw new Error("The local backend is not connected.");
+      throw new Error("The configured backend is not connected.");
     }
     this.socket.send(
       JSON.stringify({

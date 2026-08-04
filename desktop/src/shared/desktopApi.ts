@@ -13,7 +13,13 @@ export type OverlayPreferences = Readonly<{
   fontSize: number;
 }>;
 
-export type RuntimeInfo = Readonly<{ platform: string; version: string }>;
+export type RuntimeInfo = Readonly<{
+  platform: string;
+  version: string;
+  environment: "development" | "production";
+  apiBaseUrl: string;
+  websocketUrl: string;
+}>;
 export type CandidateProfileContext = Readonly<Record<string, unknown>>;
 
 export type DesktopApi = Readonly<{

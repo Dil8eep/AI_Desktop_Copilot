@@ -15,6 +15,10 @@ import type {
   CandidateProfileContext,
   OverlayPreferences,
 } from "../shared/desktopApi";
+import {
+  resolveDesktopRuntimeConfig,
+  type DesktopRuntimeConfig,
+} from "./runtimeConfig";
 import { BackendSocketClient } from "./services/backendSocketClient";
 
 const overlayDefaults: OverlayPreferences = { opacity: 0.92, fontSize: 16 };
@@ -269,11 +273,14 @@ class DesktopRuntime {
   }
 }
 
-const registerIpc = (runtime: DesktopRuntime): void => {
+const registerIpc = (runtime: DesktopRuntime, config: DesktopRuntimeConfig): void => {
   ipcMain.handle("app:quit", () => app.quit());
   ipcMain.handle("app:get-runtime-info", () => ({
     platform: process.platform,
     version: app.getVersion(),
+    environment: config.environment,
+    apiBaseUrl: config.apiBaseUrl,
+    websocketUrl: config.websocketUrl,
   }));
   ipcMain.handle("backend:get-status", () => runtime.getBackendStatus());
   ipcMain.handle("profile:get-status", () => runtime.getCandidateProfileReady());
@@ -360,14 +367,15 @@ const createTray = (runtime: DesktopRuntime): Tray => {
 };
 
 const bootstrap = async (): Promise<void> => {
+  const config = resolveDesktopRuntimeConfig(process.env, app.isPackaged);
   const windows = createWindows();
   const backend = new BackendSocketClient({
-    url: process.env.COPILOT_BACKEND_URL ?? "ws://127.0.0.1:8765/ws",
+    url: config.websocketUrl,
     localToken: process.env.COPILOT_LOCAL_AUTH_TOKEN ?? "development-only-token",
     reconnectDelayMs: 1_500,
   });
   const runtime = new DesktopRuntime(backend, windows);
-  registerIpc(runtime);
+  registerIpc(runtime, config);
   await loadWindows(windows);
   const tray = createTray(runtime);
   runtime.start();

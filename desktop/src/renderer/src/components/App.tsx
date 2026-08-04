@@ -7,6 +7,7 @@ import {
   type ReactElement,
   type ReactNode,
 } from "react";
+import type { RuntimeInfo } from "../../../shared/desktopApi";
 import { useDesktopStore } from "../store/desktopStore";
 
 type AuthMode = "login" | "signup";
@@ -17,8 +18,6 @@ type ProfileSectionProps = Readonly<{
   title: string;
   value: unknown;
 }>;
-
-const API_BASE_URL = "http://127.0.0.1:8765";
 
 const EXPERIENCE_LEVELS = [
   "Fresher",
@@ -49,10 +48,10 @@ const profileText = (value: unknown): string => {
     return String(value);
   }
   if (Array.isArray(value)) {
-    return value.map(profileText).filter(Boolean).join(" ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ ");
+    return value.map(profileText).filter(Boolean).join(" | ");
   }
   if (isRecord(value)) {
-    return Object.values(value).map(profileText).filter(Boolean).join(" ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ ");
+    return Object.values(value).map(profileText).filter(Boolean).join(" | ");
   }
   return "";
 };
@@ -178,14 +177,19 @@ export const App = (): ReactElement => {
   const [profilePrepared, setProfilePrepared] = useState(false);
   const [sessionStarted, setSessionStarted] = useState(false);
   const { backendStatus } = useDesktopStore();
+  const [runtimeInfo, setRuntimeInfo] = useState<RuntimeInfo | null>(null);
+  const apiBaseUrl = runtimeInfo?.apiBaseUrl ?? "";
 
   useEffect(() => {
-    void window.desktopApi.getRuntimeInfo();
+    void window.desktopApi
+      .getRuntimeInfo()
+      .then(setRuntimeInfo)
+      .catch(() => setMessage("Desktop backend configuration is unavailable."));
   }, []);
 
   const restoreCandidateProfile = useCallback(
     async (token: string, signal?: AbortSignal): Promise<ProfileRecord | null> => {
-      const response = await fetch(`${API_BASE_URL}/api/profile`, {
+      const response = await fetch(`${apiBaseUrl}/api/profile`, {
         headers: { Authorization: `Bearer ${token}` },
         cache: "no-store",
         signal,
@@ -222,11 +226,11 @@ export const App = (): ReactElement => {
       }
       return result.profile;
     },
-    [],
+    [apiBaseUrl],
   );
 
   useEffect(() => {
-    if (!accessToken) return;
+    if (!accessToken || !apiBaseUrl) return;
     const controller = new AbortController();
     setMessage("Signed in. Loading your saved resume profile...");
     void restoreCandidateProfile(accessToken, controller.signal)
@@ -247,14 +251,17 @@ export const App = (): ReactElement => {
         );
       });
     return () => controller.abort();
-  }, [accessToken, restoreCandidateProfile]);
+  }, [accessToken, apiBaseUrl, restoreCandidateProfile]);
   const authenticate = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
     setBusy(true);
     setMessage("");
     try {
+      if (!apiBaseUrl) {
+        throw new Error("Desktop backend configuration is still loading.");
+      }
       const endpoint = authMode === "login" ? "login" : "signup";
-      const response = await fetch(`${API_BASE_URL}/api/auth/${endpoint}`, {
+      const response = await fetch(`${apiBaseUrl}/api/auth/${endpoint}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
@@ -293,8 +300,11 @@ export const App = (): ReactElement => {
     setBusy(true);
     setMessage("Uploading and preparing your profile...");
     try {
+      if (!apiBaseUrl) {
+        throw new Error("Desktop backend configuration is unavailable.");
+      }
       const headers = { Authorization: `Bearer ${accessToken}` };
-      const upload = await fetch(`${API_BASE_URL}/api/resume/upload`, {
+      const upload = await fetch(`${apiBaseUrl}/api/resume/upload`, {
         method: "POST",
         headers: {
           ...headers,
@@ -304,7 +314,7 @@ export const App = (): ReactElement => {
         body: await resume.arrayBuffer(),
       });
       if (!upload.ok) throw new Error("Resume upload failed.");
-      const parse = await fetch(`${API_BASE_URL}/api/resume/parse`, {
+      const parse = await fetch(`${apiBaseUrl}/api/resume/parse`, {
         method: "POST",
         headers,
       });
@@ -410,7 +420,11 @@ export const App = (): ReactElement => {
                 </button>
               </span>
             </label>
-            <button className="primary-action" disabled={busy} type="submit">
+            <button
+              className="primary-action"
+              disabled={busy || !runtimeInfo}
+              type="submit"
+            >
               {busy
                 ? "Please wait..."
                 : authMode === "login"
@@ -476,7 +490,12 @@ export const App = (): ReactElement => {
             </h1>
           </div>
           <span className="status-badge">
-            <i /> {backendStatus}
+            <i /> {backendStatus} -{" "}
+            {runtimeInfo
+              ? runtimeInfo.environment === "production"
+                ? "Cloud"
+                : "Local"
+              : "Configuring"}
           </span>
         </header>
         {view === "dashboard" && (
@@ -499,9 +518,9 @@ export const App = (): ReactElement => {
               <label className="field-label">
                 Resume
                 {candidateProfile ? (
-                  <small>Optional replacement ÃƒÂ¯Ã‚Â¿Ã‚Â½ PDF only</small>
+                  <small>Optional replacement - PDF only</small>
                 ) : (
-                  <small>Required ÃƒÂ¯Ã‚Â¿Ã‚Â½ PDF only</small>
+                  <small>Required - PDF only</small>
                 )}
               </label>
               <label className="resume-drop">
