@@ -1,0 +1,22 @@
+services:
+  copilot_postgres:
+    image: postgres:15
+    container_name: ai_desktop_copilot_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ai_desktop_copilot
+      POSTGRES_USER: copilot_user
+      POSTGRES_PASSWORD: ${COPILOT_POSTGRES_PASSWORD:-change-this-password}
+    ports:
+      - "127.0.0.1:5434:5432"
+    volumes:
+      - copilot_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U copilot_user -d ai_desktop_copilot"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  copilot_pgdata:
+    name: ai-desktop-copilot_pgdata

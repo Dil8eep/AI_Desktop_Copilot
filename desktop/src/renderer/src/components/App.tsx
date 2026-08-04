@@ -1,0 +1,629 @@
+import {
+  useCallback,
+  useEffect,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+  type ReactElement,
+  type ReactNode,
+} from "react";
+import { useDesktopStore } from "../store/desktopStore";
+
+type AuthMode = "login" | "signup";
+type View = "dashboard" | "resume" | "sessions";
+type ProfileRecord = Readonly<Record<string, unknown>>;
+
+type ProfileSectionProps = Readonly<{
+  title: string;
+  value: unknown;
+}>;
+
+const API_BASE_URL = "http://127.0.0.1:8765";
+
+const EXPERIENCE_LEVELS = [
+  "Fresher",
+  "Less than 1 year",
+  "2 years",
+  "3 years",
+  "4 years",
+  "5 years",
+  "6 years",
+  "7 years",
+  "8 years",
+  "9 years",
+  "10 years",
+  "More than 10 years",
+] as const;
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const humanize = (value: string): string =>
+  value
+    .replaceAll("_", " ")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+
+const profileText = (value: unknown): string => {
+  if (typeof value === "string" || typeof value === "number") {
+    return String(value);
+  }
+  if (Array.isArray(value)) {
+    return value.map(profileText).filter(Boolean).join(" ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ ");
+  }
+  if (isRecord(value)) {
+    return Object.values(value).map(profileText).filter(Boolean).join(" ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ ");
+  }
+  return "";
+};
+
+const detailContent = (value: unknown): ReactNode => {
+  if (Array.isArray(value)) {
+    return (
+      <ul className="profile-bullet-list">
+        {value.map((item, index) => (
+          <li key={`${profileText(item)}-${index}`}>{profileText(item)}</li>
+        ))}
+      </ul>
+    );
+  }
+  return profileText(value);
+};
+
+const ProfileSection = ({ title, value }: ProfileSectionProps): ReactElement => {
+  if (Array.isArray(value)) {
+    return (
+      <section className="profile-section">
+        <h2>{humanize(title)}</h2>
+        <div className="profile-entry-list">
+          {value.map((entry, index) =>
+            isRecord(entry) ? (
+              <article className="profile-entry" key={`${title}-${index}`}>
+                {Object.entries(entry).map(([key, item]) => (
+                  <div className="profile-entry-field" key={key}>
+                    <span>{humanize(key)}</span>
+                    <div>{detailContent(item)}</div>
+                  </div>
+                ))}
+              </article>
+            ) : (
+              <article className="profile-entry" key={`${title}-${index}`}>
+                {profileText(entry)}
+              </article>
+            ),
+          )}
+        </div>
+      </section>
+    );
+  }
+
+  if (isRecord(value)) {
+    return (
+      <section className="profile-section">
+        <h2>{humanize(title)}</h2>
+        <div className="profile-group-list">
+          {Object.entries(value).map(([key, item]) => (
+            <article className="profile-group" key={key}>
+              <h3>{humanize(key)}</h3>
+              <p>{profileText(item)}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="profile-section">
+      <h2>{humanize(title)}</h2>
+      <p>{profileText(value)}</p>
+    </section>
+  );
+};
+
+const ProfileView = ({
+  profile,
+}: Readonly<{ profile: ProfileRecord }>): ReactElement => {
+  const candidate = isRecord(profile.candidate) ? profile.candidate : {};
+  const sections = isRecord(profile.sections) ? profile.sections : {};
+  const additionalSections = isRecord(profile.additional_sections)
+    ? profile.additional_sections
+    : {};
+  const summary = profileText(profile.summary);
+  const name = profileText(candidate.name) || "Candidate profile";
+  const contactFields = ["email", "phone", "location", "linkedin"]
+    .map((key) => ({ key, value: profileText(candidate[key]) }))
+    .filter((entry) => entry.value);
+
+  return (
+    <div className="profile-view">
+      <section className="profile-overview">
+        <div>
+          <p className="kicker">PARSED RESUME</p>
+          <h2>{name}</h2>
+        </div>
+        {contactFields.length > 0 && (
+          <div className="profile-contact-list">
+            {contactFields.map(({ key, value }) => (
+              <span key={key}>{value}</span>
+            ))}
+          </div>
+        )}
+        {summary && <p className="profile-summary">{summary}</p>}
+      </section>
+      {Object.entries(sections).map(([title, value]) => (
+        <ProfileSection key={title} title={title} value={value} />
+      ))}
+      {Object.entries(additionalSections).map(([title, value]) => (
+        <ProfileSection key={title} title={title} value={value} />
+      ))}
+    </div>
+  );
+};
+
+export const App = (): ReactElement => {
+  const [authMode, setAuthMode] = useState<AuthMode>("login");
+  const [view, setView] = useState<View>("dashboard");
+  const [accessToken, setAccessToken] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [resume, setResume] = useState<File | null>(null);
+  const [candidateProfile, setCandidateProfile] = useState<ProfileRecord | null>(null);
+  const [jobRole, setJobRole] = useState("");
+  const [company, setCompany] = useState("");
+  const [experienceLevel, setExperienceLevel] = useState("");
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [profilePrepared, setProfilePrepared] = useState(false);
+  const [sessionStarted, setSessionStarted] = useState(false);
+  const { backendStatus } = useDesktopStore();
+
+  useEffect(() => {
+    void window.desktopApi.getRuntimeInfo();
+  }, []);
+
+  const restoreCandidateProfile = useCallback(
+    async (token: string, signal?: AbortSignal): Promise<ProfileRecord | null> => {
+      const response = await fetch(`${API_BASE_URL}/api/profile`, {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
+        signal,
+      });
+      if (!response.ok) {
+        throw new Error(
+          response.status === 401
+            ? "Your session expired. Please sign in again."
+            : "Unable to load your saved resume profile.",
+        );
+      }
+      const result = (await response.json()) as { profile?: unknown };
+      if (!isRecord(result.profile)) {
+        await window.desktopApi.setCandidateProfileContext(null);
+        setCandidateProfile(null);
+        setProfilePrepared(false);
+        return null;
+      }
+      await window.desktopApi.setCandidateProfileContext(result.profile);
+      setCandidateProfile(result.profile);
+      setProfilePrepared(true);
+      setSessionStarted(false);
+      const preferences = isRecord(result.profile.session_preferences)
+        ? result.profile.session_preferences
+        : {};
+      if (typeof preferences.job_role === "string") {
+        setJobRole(preferences.job_role);
+      }
+      if (typeof preferences.company === "string") {
+        setCompany(preferences.company);
+      }
+      if (typeof preferences.experience_level === "string") {
+        setExperienceLevel(preferences.experience_level);
+      }
+      return result.profile;
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!accessToken) return;
+    const controller = new AbortController();
+    setMessage("Signed in. Loading your saved resume profile...");
+    void restoreCandidateProfile(accessToken, controller.signal)
+      .then((profile) => {
+        if (controller.signal.aborted) return;
+        setMessage(
+          profile
+            ? "Signed in. Your saved resume profile is loaded."
+            : "Signed in. Upload and parse a resume to prepare your knowledge base.",
+        );
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        setMessage(
+          error instanceof Error
+            ? error.message
+            : "Unable to load your saved resume profile.",
+        );
+      });
+    return () => controller.abort();
+  }, [accessToken, restoreCandidateProfile]);
+  const authenticate = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
+    event.preventDefault();
+    setBusy(true);
+    setMessage("");
+    try {
+      const endpoint = authMode === "login" ? "login" : "signup";
+      const response = await fetch(`${API_BASE_URL}/api/auth/${endpoint}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      const result = (await response.json()) as {
+        accessToken?: string;
+        error?: string;
+      };
+      if (!response.ok || !result.accessToken) {
+        throw new Error(result.error ?? "Authentication failed.");
+      }
+      setAccessToken(result.accessToken);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Authentication failed.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onResumeChange = (event: ChangeEvent<HTMLInputElement>): void => {
+    const file = event.target.files?.[0] ?? null;
+    if (file && file.type !== "application/pdf") {
+      setResume(null);
+      setMessage("Please select a PDF resume.");
+      return;
+    }
+    setResume(file);
+    setMessage("");
+  };
+
+  const startSession = async (): Promise<void> => {
+    if (!resume || !jobRole.trim() || !company.trim() || !experienceLevel) {
+      setMessage("Add a resume, job role, company, and experience before starting.");
+      return;
+    }
+    setBusy(true);
+    setMessage("Uploading and preparing your profile...");
+    try {
+      const headers = { Authorization: `Bearer ${accessToken}` };
+      const upload = await fetch(`${API_BASE_URL}/api/resume/upload`, {
+        method: "POST",
+        headers: {
+          ...headers,
+          "Content-Type": "application/pdf",
+          "X-Filename": resume.name,
+        },
+        body: await resume.arrayBuffer(),
+      });
+      if (!upload.ok) throw new Error("Resume upload failed.");
+      const parse = await fetch(`${API_BASE_URL}/api/resume/parse`, {
+        method: "POST",
+        headers,
+      });
+      const parsed = (await parse.json()) as {
+        error?: string;
+        profile?: Record<string, unknown>;
+      };
+      if (!parse.ok || !parsed.profile) {
+        throw new Error(parsed.error ?? "Resume parsing failed.");
+      }
+      const sessionProfile = {
+        session_preferences: {
+          experience_level: experienceLevel,
+          job_role: jobRole.trim(),
+          company: company.trim(),
+        },
+        ...parsed.profile,
+      };
+      await window.desktopApi.setCandidateProfileContext(sessionProfile);
+      setCandidateProfile(sessionProfile);
+      setProfilePrepared(true);
+      setSessionStarted(false);
+      setMessage("Profile prepared. Select Start Overlay when you are ready.");
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "Unable to start the session.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const openOverlay = async (): Promise<void> => {
+    try {
+      if (sessionStarted) {
+        await window.desktopApi.showOverlay();
+      } else {
+        await window.desktopApi.startOverlaySession();
+        setSessionStarted(true);
+      }
+      setMessage("");
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "Unable to open the overlay.",
+      );
+    }
+  };
+  if (!accessToken) {
+    return (
+      <main className="auth-page">
+        <section className="auth-panel">
+          <div className="auth-brand">
+            <span>CP</span>
+            <div>
+              <p>AI DESKTOP COPILOT</p>
+              <h1>Prepare with clarity.</h1>
+            </div>
+          </div>
+          <p className="auth-copy">
+            A private workspace for consented meeting assistance, learning,
+            accessibility, and coding practice.
+          </p>
+          <form onSubmit={(event) => void authenticate(event)}>
+            <label>
+              Email
+              <input
+                autoComplete="email"
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder="you@example.com"
+                required
+                type="email"
+                value={email}
+              />
+            </label>
+            <label>
+              Password
+              <span className="password-field">
+                <input
+                  autoComplete={
+                    authMode === "login" ? "current-password" : "new-password"
+                  }
+                  minLength={8}
+                  onChange={(event) => setPassword(event.target.value)}
+                  placeholder="At least 8 characters"
+                  required
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                />
+                <button
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  aria-pressed={showPassword}
+                  className="password-toggle"
+                  onClick={() => setShowPassword((current) => !current)}
+                  type="button"
+                >
+                  <svg aria-hidden="true" viewBox="0 0 24 24">
+                    {showPassword ? (
+                      <path d="m3 3 18 18m-5.3-5.3A4.5 4.5 0 0 1 9.3 9.3M5.3 5.3C3.3 6.9 2 9 2 12c2.2 4 5.5 6 10 6 1.3 0 2.5-.2 3.6-.6M9.9 4.1c.7-.1 1.4-.1 2.1-.1 4.5 0 7.8 2 10 6- .4.8-.9 1.5-1.5 2.2M14.1 14.1A3 3 0 0 1 9.9 9.9" />
+                    ) : (
+                      <path d="M2 12c2.2-4 5.5-6 10-6s7.8 2 10 6c-2.2 4-5.5 6-10 6S4.2 16 2 12Zm10 3.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" />
+                    )}
+                  </svg>
+                </button>
+              </span>
+            </label>
+            <button className="primary-action" disabled={busy} type="submit">
+              {busy
+                ? "Please wait..."
+                : authMode === "login"
+                  ? "Sign in"
+                  : "Create account"}
+            </button>
+          </form>
+          <button
+            className="auth-switch"
+            onClick={() => setAuthMode(authMode === "login" ? "signup" : "login")}
+            type="button"
+          >
+            {authMode === "login"
+              ? "New here? Create an account"
+              : "Already have an account? Sign in"}
+          </button>
+          {message && <p className="auth-message">{message}</p>}
+        </section>
+      </main>
+    );
+  }
+
+  return (
+    <main className="workspace-page">
+      <aside className="workspace-sidebar">
+        <div className="workspace-logo">CP</div>
+        <p className="workspace-name">COPILOT</p>
+        {(["dashboard", "resume", "sessions"] as View[]).map((item) => (
+          <button
+            className={view === item ? "nav-item active" : "nav-item"}
+            key={item}
+            onClick={() => setView(item)}
+            type="button"
+          >
+            {item}
+          </button>
+        ))}
+        <button
+          className="nav-item logout"
+          onClick={() => {
+            setAccessToken("");
+            setPassword("");
+            setCandidateProfile(null);
+            setProfilePrepared(false);
+            setSessionStarted(false);
+            void window.desktopApi.setCandidateProfileContext(null);
+          }}
+          type="button"
+        >
+          Sign out
+        </button>
+      </aside>
+      <section className="workspace-main">
+        <header className="workspace-header">
+          <div>
+            <p className="kicker">{view.toUpperCase()}</p>
+            <h1>
+              {view === "dashboard"
+                ? "Your session workspace"
+                : view === "resume"
+                  ? "Resume profile"
+                  : "Session history"}
+            </h1>
+          </div>
+          <span className="status-badge">
+            <i /> {backendStatus}
+          </span>
+        </header>
+        {view === "dashboard" && (
+          <div className="workspace-grid">
+            <section className="hero-card">
+              <p className="kicker">NEW SESSION</p>
+              <h2>Ready when you are.</h2>
+              <p>
+                Bring your resume and role context together before starting the visible
+                Copilot overlay.
+              </p>
+              <div className="feature-row">
+                <span>Profile-aware</span>
+                <span>Consent-first</span>
+                <span>Streaming</span>
+              </div>
+            </section>
+            <section className="setup-card">
+              <h2>Set up a session</h2>
+              <label className="field-label">
+                Resume
+                {candidateProfile ? (
+                  <small>Optional replacement ÃƒÂ¯Ã‚Â¿Ã‚Â½ PDF only</small>
+                ) : (
+                  <small>Required ÃƒÂ¯Ã‚Â¿Ã‚Â½ PDF only</small>
+                )}
+              </label>
+              <label className="resume-drop">
+                <input accept="application/pdf" onChange={onResumeChange} type="file" />
+                <strong>
+                  {resume?.name ??
+                    (candidateProfile
+                      ? "Saved resume profile is ready"
+                      : "Choose your resume")}
+                </strong>
+                <span>
+                  {resume
+                    ? `${Math.round(resume.size / 1024)} KB selected`
+                    : candidateProfile
+                      ? "Choose a new PDF only when you want to replace it"
+                      : "Browse for a PDF file"}
+                </span>
+              </label>
+              <label className="field-label">Job role</label>
+              <input
+                className="dashboard-input"
+                onChange={(event) => setJobRole(event.target.value)}
+                placeholder="AI Engineer"
+                value={jobRole}
+              />
+              <label className="field-label">Company</label>
+              <input
+                className="dashboard-input"
+                onChange={(event) => setCompany(event.target.value)}
+                placeholder="Company name"
+                value={company}
+              />
+              <label className="field-label">Experience</label>
+              <select
+                className="dashboard-input"
+                onChange={(event) => setExperienceLevel(event.target.value)}
+                value={experienceLevel}
+              >
+                <option value="">Select experience</option>
+                {EXPERIENCE_LEVELS.map((level) => (
+                  <option key={level} value={level}>
+                    {level}
+                  </option>
+                ))}
+              </select>
+              <button
+                className="primary-action"
+                disabled={
+                  busy ||
+                  !resume ||
+                  !jobRole.trim() ||
+                  !company.trim() ||
+                  !experienceLevel
+                }
+                onClick={() => void startSession()}
+                type="button"
+              >
+                {busy
+                  ? "Preparing..."
+                  : candidateProfile
+                    ? "Update profile"
+                    : "Start session"}
+              </button>
+              <button
+                className="secondary-action"
+                disabled={!profilePrepared || busy}
+                onClick={() => void openOverlay()}
+                type="button"
+              >
+                {sessionStarted ? "Show Overlay" : "Start Overlay"}
+              </button>
+              {message && <p className="session-message">{message}</p>}
+            </section>
+            <section className="activity-card">
+              <h2>Session checklist</h2>
+              <ol>
+                <li className={resume || candidateProfile ? "complete" : ""}>
+                  {candidateProfile && !resume
+                    ? "Saved resume profile loaded"
+                    : "Upload a resume"}
+                </li>
+                <li
+                  className={
+                    profilePrepared || (jobRole && company && experienceLevel)
+                      ? "complete"
+                      : ""
+                  }
+                >
+                  {profilePrepared && !resume
+                    ? "Saved profile details are ready"
+                    : "Add role, company, and experience"}
+                </li>
+                <li className={sessionStarted ? "complete" : ""}>
+                  Start the overlay when ready
+                </li>
+              </ol>
+              <p>Your overlay appears only after the profile is prepared.</p>
+            </section>
+          </div>
+        )}
+        {view === "resume" &&
+          (candidateProfile ? (
+            <ProfileView profile={candidateProfile} />
+          ) : (
+            <section className="empty-card">
+              <h2>No parsed resume yet</h2>
+              <p>
+                Upload your PDF and select Start session from Dashboard. The parsed
+                profile will then appear here in its available sections.
+              </p>
+            </section>
+          ))}
+        {view === "sessions" && (
+          <section className="empty-card">
+            <h2>Session history</h2>
+            <p>
+              Completed consented sessions will appear here once persistent session
+              storage is added.
+            </p>
+          </section>
+        )}
+      </section>
+    </main>
+  );
+};

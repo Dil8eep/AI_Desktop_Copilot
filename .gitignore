@@ -1,0 +1,34 @@
+# Node and Electron
+node_modules/
+dist/
+coverage/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Secrets and generated local configuration
+.env
+.env.*
+!.env.example
+
+# OS and Electron runtime artifacts
+*.log
+*.sqlite3
+*.db
+Thumbs.db
+Desktop.ini
+# Runtime uploads and temporary test artifacts
+uploads/
+pytest-cache-files-*/
+.pytest-*/
+
+# Reproducible build tooling
+.vite/
+*.tsbuildinfo
+*.egg-info/
+release/

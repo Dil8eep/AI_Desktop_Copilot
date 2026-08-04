@@ -1,0 +1,22 @@
+{
+  "name": "ai-desktop-copilot",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Windows-first AI desktop copilot",
+  "workspaces": [
+    "desktop",
+    "admin-portal"
+  ],
+  "scripts": {
+    "dev:desktop": "npm --workspace @copilot/desktop run dev",
+    "build:desktop": "npm --workspace @copilot/desktop run build",
+    "lint:desktop": "npm --workspace @copilot/desktop run lint",
+    "test:desktop": "npm --workspace @copilot/desktop run test",
+    "dev:admin": "npm --workspace @copilot/admin-portal run dev",
+    "build:admin": "npm --workspace @copilot/admin-portal run build",
+    "typecheck:admin": "npm --workspace @copilot/admin-portal run typecheck"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

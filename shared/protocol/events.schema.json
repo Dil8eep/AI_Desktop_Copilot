@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-desktop-copilot.local/schemas/events-1.0.json",
+  "title": "AI Desktop Copilot Event Envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "event", "sessionId", "requestId", "timestamp", "payload"],
+  "properties": {
+    "version": { "const": "1.0" },
+    "event": {
+      "enum": [
+        "system.ready", "session.start", "session.stop", "audio.chunk", "audio.segmented",
+        "screen.capture", "settings.update", "speech.partial", "speech.final",
+        "vision.updated", "context.updated", "llm.token", "llm.completed",
+        "overlay.update", "protocol.error"
+      ]
+    },
+    "sessionId": { "type": "string", "format": "uuid" },
+    "requestId": { "type": "string", "format": "uuid" },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "payload": { "type": "object" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "event": { "const": "session.start" } } },
+      "then": { "properties": { "payload": { "$ref": "#/$defs/sessionStart" } } }
+    },
+    {
+      "if": { "properties": { "event": { "const": "session.stop" } } },
+      "then": { "properties": { "payload": { "$ref": "#/$defs/sessionStop" } } }
+    },
+    {
+      "if": { "properties": { "event": { "const": "llm.token" } } },
+      "then": { "properties": { "payload": { "$ref": "#/$defs/llmToken" } } }
+    },
+    {
+      "if": { "properties": { "event": { "const": "llm.completed" } } },
+      "then": { "properties": { "payload": { "$ref": "#/$defs/llmCompleted" } } }
+    },
+    {
+      "if": { "properties": { "event": { "const": "protocol.error" } } },
+      "then": { "properties": { "payload": { "$ref": "#/$defs/protocolError" } } }
+    }
+  ],
+  "$defs": {
+    "sessionStart": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["prompt"],
+      "properties": { "prompt": { "type": "string", "minLength": 1, "maxLength": 8000 } }
+    },
+    "sessionStop": { "type": "object", "additionalProperties": false },
+    "llmToken": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["delta"],
+      "properties": { "delta": { "type": "string", "minLength": 1 } }
+    },
+    "llmCompleted": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reason"],
+      "properties": { "reason": { "enum": ["completed", "cancelled", "failed"] } }
+    },
+    "protocolError": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code"],
+      "properties": { "code": { "type": "string" } }
+    }
+  }
+}
