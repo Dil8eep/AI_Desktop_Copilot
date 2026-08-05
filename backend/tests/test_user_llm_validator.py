@@ -10,18 +10,18 @@ from app.infrastructure.user_llm_credential_validator import (
 )
 
 
-class RecordingResponses:
+class RecordingModels:
     def __init__(self) -> None:
         self.requests: list[dict[str, Any]] = []
 
-    async def create(self, **kwargs: Any) -> object:
-        self.requests.append(kwargs)
+    async def retrieve(self, model: str) -> object:
+        self.requests.append({"model": model})
         return object()
 
 
 class FakeOpenAiClient:
-    def __init__(self, responses: RecordingResponses) -> None:
-        self.responses = responses
+    def __init__(self, models: RecordingModels) -> None:
+        self.models = models
 
 
 class ProviderError(Exception):
@@ -31,14 +31,14 @@ class ProviderError(Exception):
 
 
 @pytest.mark.asyncio
-async def test_openai_validation_uses_normal_responses_request(
+async def test_openai_validation_checks_key_and_model_without_inference(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    responses = RecordingResponses()
+    models = RecordingModels()
     monkeypatch.setattr(
         validator_module,
         "AsyncOpenAI",
-        lambda **_kwargs: FakeOpenAiClient(responses),
+        lambda **_kwargs: FakeOpenAiClient(models),
     )
 
     result = await LiveUserLlmCredentialValidator().validate(
@@ -46,7 +46,7 @@ async def test_openai_validation_uses_normal_responses_request(
     )
 
     assert result.valid is True
-    assert responses.requests == [{"model": "gpt-model", "input": "Reply with OK."}]
+    assert models.requests == [{"model": "gpt-model"}]
 
 
 def test_openai_errors_distinguish_key_model_and_request() -> None:

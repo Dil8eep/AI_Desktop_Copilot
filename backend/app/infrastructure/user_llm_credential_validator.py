@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import logging
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -9,9 +10,11 @@ from openai import AsyncOpenAI
 
 from app.infrastructure.provider_credential_validator import CredentialValidation
 
+logger = logging.getLogger(__name__)
+
 
 class LiveUserLlmCredentialValidator:
-    """Validate provider auth and model access with a minimal generation."""
+    """Validate provider authentication and model access before activation."""
 
     _OPENAI_COMPATIBLE_BASE_URLS = {
         "groq": "https://api.groq.com/openai/v1",
@@ -45,14 +48,18 @@ class LiveUserLlmCredentialValidator:
         except TimeoutError:
             return CredentialValidation(False, "provider_timeout")
         except Exception as error:
-            return CredentialValidation(False, self._safe_error_code(error))
+            error_code = self._safe_error_code(error)
+            logger.warning(
+                "User LLM validation failed provider=%s model=%s error=%s",
+                provider,
+                model,
+                error_code,
+            )
+            return CredentialValidation(False, error_code)
 
     async def _validate_openai(self, credential: str, model: str) -> None:
         client = AsyncOpenAI(api_key=credential, timeout=self._timeout_seconds)
-        await client.responses.create(
-            model=model,
-            input="Reply with OK.",
-        )
+        await client.models.retrieve(model)
 
     async def _validate_openai_compatible(
         self, provider: str, credential: str, model: str
