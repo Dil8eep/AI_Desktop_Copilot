@@ -101,7 +101,7 @@ class UserLlmCredentialRepository:
             await connection.close()
 
     async def activate(self, credential_id: str, user_id: str) -> None:
-        import asyncpg  # type: ignore[import-untyped]
+        import asyncpg
 
         connection = await asyncpg.connect(self._url)
         try:
@@ -142,7 +142,7 @@ class UserLlmCredentialRepository:
     async def mark_invalid(
         self, credential_id: str, user_id: str, error_code: str
     ) -> None:
-        import asyncpg  # type: ignore[import-untyped]
+        import asyncpg
 
         connection = await asyncpg.connect(self._url)
         try:
@@ -161,7 +161,7 @@ class UserLlmCredentialRepository:
             await connection.close()
 
     async def active_metadata(self, user_id: str) -> dict[str, Any] | None:
-        import asyncpg  # type: ignore[import-untyped]
+        import asyncpg
 
         connection = await asyncpg.connect(self._url)
         try:
@@ -181,7 +181,7 @@ class UserLlmCredentialRepository:
 
     async def active_material(self, user_id: str) -> dict[str, Any] | None:
         """Load encrypted active material for server-side runtime resolution."""
-        import asyncpg  # type: ignore[import-untyped]
+        import asyncpg
 
         connection = await asyncpg.connect(self._url)
         try:
@@ -199,7 +199,7 @@ class UserLlmCredentialRepository:
             await connection.close()
 
     async def retire_active(self, user_id: str) -> bool:
-        import asyncpg  # type: ignore[import-untyped]
+        import asyncpg
 
         connection = await asyncpg.connect(self._url)
         try:
@@ -212,7 +212,7 @@ class UserLlmCredentialRepository:
                 """,
                 uuid.UUID(user_id),
             )
-            return result != "UPDATE 0"
+            return bool(result != "UPDATE 0")
         finally:
             await connection.close()
 
@@ -224,7 +224,7 @@ class UserLlmCredentialRepository:
         result: str,
         correlation_id: str,
     ) -> None:
-        import asyncpg  # type: ignore[import-untyped]
+        import asyncpg
 
         connection = await asyncpg.connect(self._url)
         try:
