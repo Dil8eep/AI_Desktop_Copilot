@@ -52,7 +52,6 @@ class LiveUserLlmCredentialValidator:
         await client.responses.create(
             model=model,
             input="Reply with OK.",
-            max_output_tokens=8,
         )
 
     async def _validate_openai_compatible(
@@ -99,8 +98,17 @@ class LiveUserLlmCredentialValidator:
             status_code = error.code
         if status_code in {401, 403}:
             return "provider_authentication_failed"
-        if status_code == 404:
+        body = getattr(error, "body", None)
+        error_code = body.get("code") if isinstance(body, dict) else None
+        error_param = body.get("param") if isinstance(body, dict) else None
+        if (
+            status_code == 404
+            or error_code == "model_not_found"
+            or error_param == "model"
+        ):
             return "provider_model_not_available"
+        if status_code == 400:
+            return "provider_request_invalid"
         if status_code in {402, 429}:
             return "provider_quota_unavailable"
         if isinstance(status_code, int) and status_code >= 500:
