@@ -21,7 +21,7 @@ input, select { color: #eef3fb; border: 1px solid #26344b; background: #0b1423; 
 input { width: 100%; padding: 13px 14px; }
 .password-field { display: block; position: relative; }
 .password-field input { padding-right: 46px; }
-.password-toggle { position: absolute; top: 50%; right: 9px; width: 34px; height: 34px; transform: translateY(-50%); border: 0; border-radius: 8px; color: #8f9db1; background: transparent; font-size: 18px; line-height: 1; }
+.password-toggle { position: absolute; top: 50%; right: 9px; width: 44px; height: 34px; transform: translateY(-50%); border: 0; border-radius: 8px; color: #8f9db1; background: transparent; font-size: 10px; font-weight: 700; line-height: 1; }
 .password-toggle:hover { color: #d7dff0; background: rgba(255, 255, 255, .05); }
 .password-toggle:focus-visible { outline: 2px solid #7368f7; outline-offset: 1px; }
 input:focus, select:focus { border-color: #7368f7; box-shadow: 0 0 0 3px rgba(115, 104, 247, .13); }
@@ -49,7 +49,7 @@ input:focus, select:focus { border-color: #7368f7; box-shadow: 0 0 0 3px rgba(11
 .topbar h1 { margin: 0; font: 700 25px Manrope; letter-spacing: -.025em; }
 .top-actions { display: flex; align-items: center; gap: 12px; }
 .icon-button, .avatar { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 10px; }
-.icon-button { border: 1px solid var(--line); color: #a9b5c7; background: #101927; font-size: 18px; }
+.icon-button { width: auto; padding: 0 12px; border: 1px solid var(--line); color: #a9b5c7; background: #101927; font-size: 10px; font-weight: 700; }
 .avatar { background: linear-gradient(145deg, #2b3c58, #19263b); border: 1px solid #32435e; color: #d9e1ef; font-size: 11px; font-weight: 700; }
 .page-stack { display: grid; gap: 24px; max-width: 1440px; margin: 0 auto; }
 .section-heading { display: flex; justify-content: space-between; align-items: end; gap: 20px; }

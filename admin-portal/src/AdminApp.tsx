@@ -43,10 +43,10 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 const TOKEN_KEY = "copilot_admin_access_token";
 
 const icons: Record<View, string> = {
-  overview: "â—«",
-  users: "â™™",
-  providers: "â—‡",
-  audit: "â‰¡",
+  overview: "O",
+  users: "U",
+  providers: "P",
+  audit: "A",
 };
 
 function formatDate(value: string | null): string {
@@ -125,7 +125,7 @@ function Login({ onAuthenticated }: { onAuthenticated: (token: string) => void }
         <p className="eyebrow">AI DESKTOP COPILOT</p>
         <h1>Administration, with clarity.</h1>
         <p className="login-copy">
-          A secure operational view of users, rÃ©sumÃ© readiness, and AI provider configuration.
+          A secure operational view of users, resume readiness, and AI provider configuration.
         </p>
         <form onSubmit={submit}>
           <label>
@@ -159,13 +159,13 @@ function Login({ onAuthenticated }: { onAuthenticated: (token: string) => void }
                 aria-pressed={showPassword}
                 title={showPassword ? "Hide password" : "Show password"}
               >
-                {showPassword ? "â—‰" : "â—Ž"}
+                {showPassword ? "Hide" : "Show"}
               </button>
             </span>
           </label>
           {error && <div className="error-banner">{error}</div>}
           <button className="primary-button" disabled={busy}>
-            {busy ? "Verifyingâ€¦" : "Sign in to Admin"}
+            {busy ? "Verifying..." : "Sign in to Admin"}
           </button>
         </form>
         <p className="security-note">Protected by database-verified administrator access</p>
@@ -268,7 +268,7 @@ export function AdminApp() {
         <header className="topbar">
           <div><p className="eyebrow">CONTROL CENTER</p><h1>{view === "audit" ? "Audit trail" : view[0].toUpperCase() + view.slice(1)}</h1></div>
           <div className="top-actions">
-            <button className="icon-button" onClick={() => void loadView()} title="Refresh">â†»</button>
+            <button className="icon-button" onClick={() => void loadView()} title="Refresh">Refresh</button>
             <div className="avatar">AD</div>
           </div>
         </header>
@@ -283,18 +283,18 @@ export function AdminApp() {
             <div className="metrics-grid">
               <MetricCard label="Total users" value={metrics?.total_users ?? 0} note="All registered accounts" tone="violet" />
               <MetricCard label="New users" value={metrics?.new_users ?? 0} note={`Created in the last ${period} days`} tone="cyan" />
-              <MetricCard label="RÃ©sumÃ© ready" value={metrics?.users_with_profiles ?? 0} note="Users with parsed profiles" tone="green" />
+              <MetricCard label="Resume ready" value={metrics?.users_with_profiles ?? 0} note="Users with parsed profiles" tone="green" />
               <MetricCard label="Recently active" value={metrics?.recently_active ?? 0} note={`Signed in within ${period} days`} tone="amber" />
             </div>
             <div className="overview-grid">
               <article className="panel"><div className="panel-title"><div><h3>Provider readiness</h3><p>Configuration metadata only</p></div><span className="summary-pill">{configuredProviders}/2 configured</span></div><div className="provider-list">{providers.map((provider) => <ProviderRow key={provider.provider} provider={provider} />)}</div></article>
-              <article className="panel definition-panel"><h3>How metrics are calculated</h3><dl><div><dt>Total users</dt><dd>Every account stored in the users table.</dd></div><div><dt>RÃ©sumÃ© ready</dt><dd>Accounts with a parsed candidate profile.</dd></div><div><dt>Recently active</dt><dd>Accounts that signed in during the selected period.</dd></div></dl></article>
+              <article className="panel definition-panel"><h3>How metrics are calculated</h3><dl><div><dt>Total users</dt><dd>Every account stored in the users table.</dd></div><div><dt>Resume ready</dt><dd>Accounts with a parsed candidate profile.</dd></div><div><dt>Recently active</dt><dd>Accounts that signed in during the selected period.</dd></div></dl></article>
             </div>
           </section>
         )}
 
         {view === "users" && (
-          <section className="page-stack"><div className="section-heading"><div><h2>User directory</h2><p>Account metadata only. RÃ©sumÃ© content is never shown.</p></div><form className="search" onSubmit={(e) => { e.preventDefault(); setSearch(query); }}><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by email"/><button>Search</button></form></div><div className="table-panel"><table><thead><tr><th>User</th><th>Role</th><th>RÃ©sumÃ©</th><th>Joined</th><th>Last login</th></tr></thead><tbody>{users.map((user) => <tr key={user.id}><td><strong>{user.email}</strong><span className="subtle-id">{user.id}</span></td><td><span className={`role ${user.role}`}>{user.role}</span></td><td><span className={user.profile_ready ? "ready" : "not-ready"}>{user.profile_ready ? "Ready" : "Not uploaded"}</span></td><td>{formatDate(user.created_at)}</td><td>{formatDate(user.last_login_at)}</td></tr>)}</tbody></table>{!loading && users.length === 0 && <EmptyState title="No users found" text="Try a different email search." />}</div></section>
+          <section className="page-stack"><div className="section-heading"><div><h2>User directory</h2><p>Account metadata only. Resume content is never shown.</p></div><form className="search" onSubmit={(e) => { e.preventDefault(); setSearch(query); }}><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by email"/><button>Search</button></form></div><div className="table-panel"><table><thead><tr><th>User</th><th>Role</th><th>Resume</th><th>Joined</th><th>Last login</th></tr></thead><tbody>{users.map((user) => <tr key={user.id}><td><strong>{user.email}</strong><span className="subtle-id">{user.id}</span></td><td><span className={`role ${user.role}`}>{user.role}</span></td><td><span className={user.profile_ready ? "ready" : "not-ready"}>{user.profile_ready ? "Ready" : "Not uploaded"}</span></td><td>{formatDate(user.created_at)}</td><td>{formatDate(user.last_login_at)}</td></tr>)}</tbody></table>{!loading && users.length === 0 && <EmptyState title="No users found" text="Try a different email search." />}</div></section>
         )}
 
         {view === "providers" && (
@@ -329,7 +329,7 @@ export function AdminApp() {
           </section>
         )}
         {view === "audit" && (
-          <section className="page-stack"><div className="section-heading"><div><h2>Administrative audit trail</h2><p>Security-relevant actions without request bodies or secrets.</p></div></div><div className="table-panel"><table><thead><tr><th>Action</th><th>Administrator</th><th>Target</th><th>Result</th><th>Time</th></tr></thead><tbody>{events.map((event) => <tr key={event.id}><td><strong>{event.action}</strong><span className="subtle-id">{event.correlation_id ?? "No correlation ID"}</span></td><td>{event.actor_email ?? event.actor_user_id ?? "System"}</td><td>{event.target_type ? `${event.target_type}: ${event.target_id ?? "â€”"}` : "â€”"}</td><td><span className={`status ${event.result}`}>{event.result}</span></td><td>{formatDate(event.created_at)}</td></tr>)}</tbody></table>{!loading && events.length === 0 && <EmptyState title="No audit events yet" text="Future administrative changes will appear here." />}</div></section>
+          <section className="page-stack"><div className="section-heading"><div><h2>Administrative audit trail</h2><p>Security-relevant actions without request bodies or secrets.</p></div></div><div className="table-panel"><table><thead><tr><th>Action</th><th>Administrator</th><th>Target</th><th>Result</th><th>Time</th></tr></thead><tbody>{events.map((event) => <tr key={event.id}><td><strong>{event.action}</strong><span className="subtle-id">{event.correlation_id ?? "No correlation ID"}</span></td><td>{event.actor_email ?? event.actor_user_id ?? "System"}</td><td>{event.target_type ? `${event.target_type}: ${event.target_id ?? "--"}` : "--"}</td><td><span className={`status ${event.result}`}>{event.result}</span></td><td>{formatDate(event.created_at)}</td></tr>)}</tbody></table>{!loading && events.length === 0 && <EmptyState title="No audit events yet" text="Future administrative changes will appear here." />}</div></section>
         )}
       </main>
       {credentialDialog && (
@@ -479,9 +479,9 @@ function CredentialDialog({
 }
 
 function ProviderRow({ provider }: { provider: Provider }) {
-  return <div className="provider-row"><div className={`provider-logo ${provider.provider}`}>{provider.provider === "openai" ? "â—Ž" : "G"}</div><div><strong>{provider.provider === "openai" ? "OpenAI" : "Groq"}</strong><span>{provider.purpose === "llm" ? "Language model" : "Speech transcription"}</span></div><span className={`status ${provider.status}`}>{provider.status}</span></div>;
+  return <div className="provider-row"><div className={`provider-logo ${provider.provider}`}>{provider.provider === "openai" ? "AI" : "G"}</div><div><strong>{provider.provider === "openai" ? "OpenAI" : "Groq"}</strong><span>{provider.purpose === "llm" ? "Language model" : "Speech transcription"}</span></div><span className={`status ${provider.status}`}>{provider.status}</span></div>;
 }
 
 function EmptyState({ title, text }: { title: string; text: string }) {
-  return <div className="empty-state"><div>â—‡</div><strong>{title}</strong><p>{text}</p></div>;
+  return <div className="empty-state"><div>*</div><strong>{title}</strong><p>{text}</p></div>;
 }
