@@ -13,6 +13,22 @@ import { useDesktopStore } from "../store/desktopStore";
 type AuthMode = "login" | "signup";
 type View = "dashboard" | "resume" | "sessions";
 type ProfileRecord = Readonly<Record<string, unknown>>;
+type LlmProvider = "groq" | "openrouter" | "ollama_cloud" | "gemini" | "openai";
+type LlmConfiguration = Readonly<{
+  configured: boolean;
+  provider?: LlmProvider;
+  model?: string;
+  status?: string;
+  maskedHint?: string;
+}>;
+
+const LLM_PROVIDERS: ReadonlyArray<Readonly<{ value: LlmProvider; label: string }>> = [
+  { value: "groq", label: "Groq" },
+  { value: "openrouter", label: "OpenRouter" },
+  { value: "ollama_cloud", label: "Ollama Cloud" },
+  { value: "gemini", label: "Gemini" },
+  { value: "openai", label: "OpenAI" },
+];
 
 type ProfileSectionProps = Readonly<{
   title: string;
@@ -167,6 +183,15 @@ export const App = (): ReactElement => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [llmProvider, setLlmProvider] = useState<LlmProvider>("groq");
+  const [llmModel, setLlmModel] = useState("");
+  const [llmApiKey, setLlmApiKey] = useState("");
+  const [showLlmApiKey, setShowLlmApiKey] = useState(false);
+  const [llmConfiguration, setLlmConfiguration] = useState<LlmConfiguration>({
+    configured: false,
+  });
+  const [llmBusy, setLlmBusy] = useState(false);
+  const [llmMessage, setLlmMessage] = useState("");
   const [resume, setResume] = useState<File | null>(null);
   const [candidateProfile, setCandidateProfile] = useState<ProfileRecord | null>(null);
   const [jobRole, setJobRole] = useState("");
@@ -187,6 +212,26 @@ export const App = (): ReactElement => {
       .catch(() => setMessage("Desktop backend configuration is unavailable."));
   }, []);
 
+  const restoreLlmConfiguration = useCallback(
+    async (token: string, signal?: AbortSignal): Promise<LlmConfiguration> => {
+      const response = await fetch(`${apiBaseUrl}/api/llm/config`, {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
+        signal,
+      });
+      if (!response.ok) {
+        throw new Error("Unable to load your AI model configuration.");
+      }
+      const result = (await response.json()) as LlmConfiguration;
+      setLlmConfiguration(result);
+      if (result.configured && result.provider && result.model) {
+        setLlmProvider(result.provider);
+        setLlmModel(result.model);
+      }
+      return result;
+    },
+    [apiBaseUrl],
+  );
   const restoreCandidateProfile = useCallback(
     async (token: string, signal?: AbortSignal): Promise<ProfileRecord | null> => {
       const response = await fetch(`${apiBaseUrl}/api/profile`, {
@@ -235,14 +280,21 @@ export const App = (): ReactElement => {
   useEffect(() => {
     if (!accessToken || !apiBaseUrl) return;
     const controller = new AbortController();
-    setMessage("Signed in. Loading your saved resume profile...");
-    void restoreCandidateProfile(accessToken, controller.signal)
-      .then((profile) => {
+    setMessage("Signed in. Loading your saved workspace...");
+    void Promise.all([
+      restoreCandidateProfile(accessToken, controller.signal),
+      restoreLlmConfiguration(accessToken, controller.signal),
+    ])
+      .then(([profile, llm]) => {
         if (controller.signal.aborted) return;
+        if (!llm.configured) {
+          setMessage("Signed in. Configure an AI model before using Copilot.");
+          return;
+        }
         setMessage(
           profile
-            ? "Signed in. Your saved resume profile is loaded."
-            : "Signed in. Upload and parse a resume to prepare your knowledge base.",
+            ? "Signed in. Your AI model and saved resume profile are ready."
+            : "AI model ready. Upload and parse a resume to prepare your profile.",
         );
       })
       .catch((error: unknown) => {
@@ -250,11 +302,11 @@ export const App = (): ReactElement => {
         setMessage(
           error instanceof Error
             ? error.message
-            : "Unable to load your saved resume profile.",
+            : "Unable to load your saved workspace.",
         );
       });
     return () => controller.abort();
-  }, [accessToken, apiBaseUrl, restoreCandidateProfile]);
+  }, [accessToken, apiBaseUrl, restoreCandidateProfile, restoreLlmConfiguration]);
   const authenticate = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
     setBusy(true);
@@ -284,6 +336,70 @@ export const App = (): ReactElement => {
     }
   };
 
+  const saveLlmConfiguration = async (): Promise<void> => {
+    if (!llmModel.trim() || !llmApiKey.trim()) {
+      setLlmMessage("Enter the provider model name and API key.");
+      return;
+    }
+    setLlmBusy(true);
+    setLlmMessage("Validating the provider and model...");
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/llm/config`, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        cache: "no-store",
+        body: JSON.stringify({
+          provider: llmProvider,
+          model: llmModel.trim(),
+          credential: llmApiKey.trim(),
+        }),
+      });
+      const result = (await response.json()) as LlmConfiguration & {
+        detail?: string | { error?: string };
+      };
+      if (!response.ok || !result.configured) {
+        const detail =
+          typeof result.detail === "string" ? result.detail : result.detail?.error;
+        throw new Error(detail ?? "The provider rejected this configuration.");
+      }
+      setLlmConfiguration(result);
+      setLlmApiKey("");
+      setShowLlmApiKey(false);
+      setLlmMessage("AI model validated and saved securely.");
+    } catch (error) {
+      setLlmMessage(
+        error instanceof Error ? error.message : "Unable to save the AI model.",
+      );
+    } finally {
+      setLlmBusy(false);
+    }
+  };
+
+  const removeLlmConfiguration = async (): Promise<void> => {
+    setLlmBusy(true);
+    setLlmMessage("Removing your AI model configuration...");
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/llm/config`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${accessToken}` },
+        cache: "no-store",
+      });
+      if (!response.ok) throw new Error("Unable to remove the AI model.");
+      setLlmConfiguration({ configured: false });
+      setLlmApiKey("");
+      setSessionStarted(false);
+      setLlmMessage("AI model removed. Add another configuration to use Copilot.");
+    } catch (error) {
+      setLlmMessage(
+        error instanceof Error ? error.message : "Unable to remove the AI model.",
+      );
+    } finally {
+      setLlmBusy(false);
+    }
+  };
   const onResumeChange = (event: ChangeEvent<HTMLInputElement>): void => {
     const file = event.target.files?.[0] ?? null;
     if (file && file.type !== "application/pdf") {
@@ -296,6 +412,10 @@ export const App = (): ReactElement => {
   };
 
   const startSession = async (): Promise<void> => {
+    if (!llmConfiguration.configured) {
+      setMessage("Configure and validate an AI model before parsing a resume.");
+      return;
+    }
     if (!resume || !jobRole.trim() || !company.trim() || !experienceLevel) {
       setMessage("Add a resume, job role, company, and experience before starting.");
       return;
@@ -351,6 +471,10 @@ export const App = (): ReactElement => {
   };
 
   const openOverlay = async (): Promise<void> => {
+    if (!llmConfiguration.configured) {
+      setMessage("Configure and validate an AI model before starting the overlay.");
+      return;
+    }
     try {
       if (sessionStarted) {
         await window.desktopApi.showOverlay();
@@ -473,6 +597,9 @@ export const App = (): ReactElement => {
             setCandidateProfile(null);
             setProfilePrepared(false);
             setSessionStarted(false);
+            setLlmConfiguration({ configured: false });
+            setLlmApiKey("");
+            setLlmMessage("");
             void window.desktopApi.setCandidateProfileContext(null);
           }}
           type="button"
@@ -503,6 +630,112 @@ export const App = (): ReactElement => {
         </header>
         {view === "dashboard" && (
           <div className="workspace-grid">
+            <section className="ai-model-card">
+              <div className="ai-model-heading">
+                <div>
+                  <p className="kicker">YOUR AI MODEL</p>
+                  <h2>Connect a provider</h2>
+                  <p>
+                    Your key is encrypted by the backend and is never displayed again.
+                  </p>
+                </div>
+                <span
+                  className={
+                    llmConfiguration.configured ? "model-status active" : "model-status"
+                  }
+                >
+                  {llmConfiguration.configured ? "Active" : "Setup required"}
+                </span>
+              </div>
+              {llmConfiguration.configured && (
+                <div className="active-model-summary">
+                  <strong>
+                    {LLM_PROVIDERS.find(
+                      (provider) => provider.value === llmConfiguration.provider,
+                    )?.label ?? llmConfiguration.provider}
+                  </strong>
+                  <span>{llmConfiguration.model}</span>
+                  <small>Key {llmConfiguration.maskedHint}</small>
+                </div>
+              )}
+              <div className="ai-model-fields">
+                <label>
+                  Provider
+                  <select
+                    className="dashboard-input"
+                    disabled={llmBusy}
+                    onChange={(event) =>
+                      setLlmProvider(event.target.value as LlmProvider)
+                    }
+                    value={llmProvider}
+                  >
+                    {LLM_PROVIDERS.map((provider) => (
+                      <option key={provider.value} value={provider.value}>
+                        {provider.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Model name
+                  <input
+                    className="dashboard-input"
+                    disabled={llmBusy}
+                    onChange={(event) => setLlmModel(event.target.value)}
+                    placeholder="Enter the provider model ID"
+                    value={llmModel}
+                  />
+                </label>
+                <label>
+                  API key
+                  <span className="password-field model-key-field">
+                    <input
+                      autoComplete="off"
+                      className="dashboard-input"
+                      disabled={llmBusy}
+                      onChange={(event) => setLlmApiKey(event.target.value)}
+                      placeholder={
+                        llmConfiguration.configured
+                          ? "Enter a new key to replace the current one"
+                          : "Enter your provider API key"
+                      }
+                      type={showLlmApiKey ? "text" : "password"}
+                      value={llmApiKey}
+                    />
+                    <button
+                      aria-label={showLlmApiKey ? "Hide API key" : "Show API key"}
+                      aria-pressed={showLlmApiKey}
+                      className="password-toggle"
+                      onClick={() => setShowLlmApiKey((current) => !current)}
+                      type="button"
+                    >
+                      {showLlmApiKey ? "Hide" : "Show"}
+                    </button>
+                  </span>
+                </label>
+              </div>
+              <div className="model-actions">
+                <button
+                  className="primary-action"
+                  disabled={llmBusy || !llmModel.trim() || !llmApiKey.trim()}
+                  onClick={() => void saveLlmConfiguration()}
+                  type="button"
+                >
+                  {llmBusy ? "Validating..." : "Validate and save"}
+                </button>
+                {llmConfiguration.configured && (
+                  <button
+                    className="model-remove-action"
+                    disabled={llmBusy}
+                    onClick={() => void removeLlmConfiguration()}
+                    type="button"
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+              {llmMessage && <p className="model-message">{llmMessage}</p>}
+            </section>{" "}
             <section className="hero-card">
               <p className="kicker">NEW SESSION</p>
               <h2>Ready when you are.</h2>
@@ -573,6 +806,7 @@ export const App = (): ReactElement => {
                 className="primary-action"
                 disabled={
                   busy ||
+                  !llmConfiguration.configured ||
                   !resume ||
                   !jobRole.trim() ||
                   !company.trim() ||
@@ -589,7 +823,7 @@ export const App = (): ReactElement => {
               </button>
               <button
                 className="secondary-action"
-                disabled={!profilePrepared || busy}
+                disabled={!llmConfiguration.configured || !profilePrepared || busy}
                 onClick={() => void openOverlay()}
                 type="button"
               >
@@ -600,6 +834,9 @@ export const App = (): ReactElement => {
             <section className="activity-card">
               <h2>Session checklist</h2>
               <ol>
+                <li className={llmConfiguration.configured ? "complete" : ""}>
+                  Configure and validate an AI model
+                </li>
                 <li className={resume || candidateProfile ? "complete" : ""}>
                   {candidateProfile && !resume
                     ? "Saved resume profile loaded"
