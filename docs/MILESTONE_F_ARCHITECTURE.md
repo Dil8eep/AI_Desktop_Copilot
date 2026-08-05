@@ -114,7 +114,7 @@ Use `electron-builder` with NSIS:
 - Add explicit `screen.text` and sourced audio-chunk protocol handling.
 - Add JWT expiry and production WebSocket tests.
 
-### F2 -- Local helper
+### F2 -- Local helper (implemented)
 
 - Build the Windows helper entrypoint for LiteParse and WASAPI.
 - Add private IPC, lifecycle management, bounded payloads, and failure codes.
