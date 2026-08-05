@@ -78,14 +78,16 @@ async function apiRequest<T>(
         : response.status === 403
           ? "admin_required"
           : "request_failed";
-    try {
-      const body = (await response.json()) as {
-        detail?: string | { error?: string };
-      };
-      if (typeof body.detail === "string") code = body.detail;
-      else if (body.detail?.error) code = body.detail.error;
-    } catch {
-      // Keep the normalized fallback; raw provider responses are never exposed.
+    if (response.status !== 401 && response.status !== 403) {
+      try {
+        const body = (await response.json()) as {
+          detail?: string | { error?: string };
+        };
+        if (typeof body.detail === "string") code = body.detail;
+        else if (body.detail?.error) code = body.detail.error;
+      } catch {
+        // Keep the normalized fallback; raw provider responses are never exposed.
+      }
     }
     throw new Error(code);
   }
