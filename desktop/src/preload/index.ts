@@ -14,10 +14,11 @@ const api: DesktopApi = {
     ipcRenderer.invoke("profile:set-context", profile),
   startSystemAudio: () => ipcRenderer.invoke("system-audio:start"),
   stopSystemAudio: (sessionId) => ipcRenderer.invoke("system-audio:stop", sessionId),
+  sendScreenText: (text) => ipcRenderer.invoke("screen:text", text),
   sendScreenCapture: (image, mimeType) =>
     ipcRenderer.invoke("screen:capture", image, mimeType),
-  sendAudioChunk: (sessionId, audio, sampleRateHz) =>
-    ipcRenderer.invoke("audio:chunk", sessionId, audio, sampleRateHz),
+  sendAudioChunk: (sessionId, audio, sampleRateHz, source) =>
+    ipcRenderer.invoke("audio:chunk", sessionId, audio, sampleRateHz, source),
   startOverlaySession: () => ipcRenderer.invoke("overlay:start-session"),
   showOverlay: () => ipcRenderer.invoke("overlay:show"),
   hideOverlay: () => ipcRenderer.invoke("overlay:hide"),

@@ -49,6 +49,12 @@ class ManagedRepository:
     async def mark_invalid(self, credential_id: str, error_code: str) -> None:
         return None
 
+    async def latest_retired_encrypted(self, provider: str) -> dict[str, Any] | None:
+        return None
+
+    async def rollback_to(self, credential_id: str, provider: str) -> None:
+        return None
+
     async def active_metadata(self) -> list[dict[str, Any]]:
         return []
 

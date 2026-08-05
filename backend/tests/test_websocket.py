@@ -48,6 +48,20 @@ def _client(token_delay_ms: int = 1) -> TestClient:
     )
 
 
+def _production_client() -> TestClient:
+    settings = Settings(
+        local_auth_token="test-token",
+        jwt_secret=_JWT_SECRET,
+        credential_master_key=None,
+        llm_provider="mock",
+        mock_llm_token_delay_ms=1,
+    )
+    # Exercise the production WebSocket composition without starting external
+    # database listeners that are unrelated to this handshake contract.
+    settings.environment = "production"
+    return TestClient(create_application(settings))
+
+
 def test_session_start_streams_multiple_deltas_then_completion() -> None:
     session_id = str(uuid4())
     request_id = str(uuid4())
@@ -140,3 +154,51 @@ def test_capture_binary_frame_validates_its_declared_media_type() -> None:
 
     assert error["event"] == "protocol.error"
     assert error["payload"] == {"code": "unsupported_image_type"}
+
+
+def test_production_websocket_uses_jwt_without_shared_local_token() -> None:
+    headers = _headers()
+    headers.pop("x-copilot-token")
+
+    with _production_client() as client:
+        with client.websocket_connect("/ws", headers=headers) as websocket:
+            assert websocket.receive_json()["event"] == "system.ready"
+
+
+def test_production_websocket_rejects_expired_user_token() -> None:
+    expired = JwtService(_JWT_SECRET, -1).issue_access_token(str(uuid4()))
+
+    with _production_client() as client:
+        with pytest.raises(WebSocketDisconnect) as error:
+            with client.websocket_connect(
+                "/ws", headers={"authorization": f"Bearer {expired}"}
+            ):
+                pass
+
+    assert error.value.code == 1008
+
+
+def test_audio_chunk_rejects_unknown_capture_source() -> None:
+    session_id = str(uuid4())
+
+    with _client() as client:
+        with client.websocket_connect("/ws", headers=_headers()) as websocket:
+            websocket.receive_json()
+            websocket.send_json(
+                _event(
+                    "audio.chunk",
+                    session_id,
+                    str(uuid4()),
+                    {
+                        "mimeType": "audio/pcm;codec=s16le",
+                        "sampleRateHz": 16_000,
+                        "source": "remote-device",
+                        "byteLength": 2,
+                    },
+                )
+            )
+            websocket.send_bytes(b"00")
+            error = websocket.receive_json()
+
+    assert error["event"] == "protocol.error"
+    assert error["payload"] == {"code": "unsupported_audio_source"}

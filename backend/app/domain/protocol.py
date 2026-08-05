@@ -19,6 +19,7 @@ EventName = Literal[
     "system_audio.started",
     "system_audio.stopped",
     "screen.capture",
+    "screen.text",
     "settings.update",
     "speech.partial",
     "speech.final",

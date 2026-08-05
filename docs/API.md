@@ -1,19 +1,23 @@
 # API Contract (Milestone 5)
 
-The local backend exposes `GET /health` and an authenticated WebSocket endpoint
-at `/ws`, bound to loopback by default. Every connection must send the
-`x-copilot-token` header matching `COPILOT_LOCAL_AUTH_TOKEN`.
+The backend exposes `GET /health` and an authenticated WebSocket endpoint at
+`/ws`. Every connection requires a signed user JWT in the `Authorization` header.
+Development/local connections also require `x-copilot-token` matching
+`COPILOT_LOCAL_AUTH_TOKEN`; production WSS connections do not use a shared token.
 
 ## Streaming commands
 
 - `session.start` requires `{ "prompt": string }`; it emits one or more
   `llm.token` events and exactly one `llm.completed` event.
 - `session.stop` requires `{}` and cooperatively cancels the active stream.
+- `screen.text` sends locally extracted OCR text in `{ "text": string }` and is
+  capped at 12,000 characters. It immediately starts screen-question solving.
 - `screen.capture` declares `{ "mimeType": "image/jpeg" | "image/png",
   "byteLength": number }`, immediately followed by exactly one matching binary
   image frame. Images are capped at 10 MiB.
 - `audio.chunk` declares `{ "mimeType": "audio/pcm;codec=s16le",
-  "sampleRateHz": 16000, "byteLength": number }`, followed by one matching
+  "sampleRateHz": 16000, "source": "microphone" | "system-audio",
+  "byteLength": number }`, followed by one matching
   PCM16 mono binary frame. Audio chunks are capped at 64 KiB.
 
 OCR runs in a background task and publishes `vision.updated` followed by

@@ -1,4 +1,4 @@
-﻿services:
+services:
   - type: web
     name: ai-desktop-copilot-api
     runtime: python
@@ -20,8 +20,6 @@
       - key: COPILOT_DATABASE_URL
         sync: false
       - key: COPILOT_JWT_SECRET
-        sync: false
-      - key: COPILOT_LOCAL_AUTH_TOKEN
         sync: false
       - key: COPILOT_CREDENTIAL_MASTER_KEY
         sync: false

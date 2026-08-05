@@ -24,6 +24,8 @@ _MAX_IMAGE_BYTES = 10 * 1024 * 1024
 _MAX_AUDIO_CHUNK_BYTES = 64 * 1024
 _IMAGE_MIME_TYPES = {"image/jpeg", "image/png"}
 _AUDIO_MIME_TYPE = "audio/pcm;codec=s16le"
+_AUDIO_SOURCES = {"microphone", "system-audio"}
+_MAX_SCREEN_TEXT_CHARACTERS = 12_000
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +54,9 @@ def _valid_binary_payload(event: EventEnvelope, data: bytes) -> str | None:
         if len(data) > _MAX_IMAGE_BYTES:
             return "image_too_large"
     if event.event == "audio.chunk":
+        source = event.payload.get("source", "microphone")
+        if source not in _AUDIO_SOURCES:
+            return "unsupported_audio_source"
         if mime_type != _AUDIO_MIME_TYPE:
             return "unsupported_audio_type"
         if len(data) > _MAX_AUDIO_CHUNK_BYTES:
@@ -69,11 +74,15 @@ def create_websocket_endpoint(
     console_transcript_logging: bool,
     system_audio_capture_factory: Callable[[], SystemAudioCapture],
     jwt_service: JwtService | None = None,
+    require_local_token: bool = True,
 ) -> Callable[[WebSocket], Awaitable[None]]:
     """Create an authenticated endpoint with per-connection task ownership."""
 
     async def websocket_endpoint(websocket: WebSocket) -> None:
-        if websocket.headers.get("x-copilot-token") != expected_token:
+        if (
+            require_local_token
+            and websocket.headers.get("x-copilot-token") != expected_token
+        ):
             logger.warning("WebSocket rejected: local authentication token mismatch")
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
             return
@@ -249,7 +258,10 @@ def create_websocket_endpoint(
                         context.update_screen_image(data, mime_type)
                     responses = await perception_service.analyze_screen(event, data)
                 else:
-                    responses = await audio_ingest_service.ingest(event, data)
+                    source = event.payload.get("source", "microphone")
+                    responses = await audio_ingest_service.ingest(
+                        event, data, source=str(source)
+                    )
                 await dispatch_responses(responses)
             except (SpeechTranscriptionError, ValueError) as error:
                 await outbound.put(
@@ -400,6 +412,37 @@ def create_websocket_endpoint(
                     active_streams[event.session_id] = asyncio.create_task(
                         stream_session(event),
                         name=f"copilot-session-{event.session_id}",
+                    )
+                elif event.event == "screen.text":
+                    screen_text = event.payload.get("text")
+                    if not isinstance(screen_text, str) or not screen_text.strip():
+                        await outbound.put(
+                            _error_event(
+                                event.session_id,
+                                "invalid_screen_text",
+                                event.request_id,
+                            )
+                        )
+                        continue
+                    if len(screen_text) > _MAX_SCREEN_TEXT_CHARACTERS:
+                        await outbound.put(
+                            _error_event(
+                                event.session_id,
+                                "screen_text_too_large",
+                                event.request_id,
+                            )
+                        )
+                        continue
+                    context.clear_screen_image()
+                    await dispatch_responses(
+                        (
+                            EventEnvelope.create(
+                                event="context.updated",
+                                session_id=event.session_id,
+                                request_id=event.request_id,
+                                payload={"screenText": screen_text, "truncated": False},
+                            ),
+                        )
                     )
                 elif event.event in {"screen.capture", "audio.chunk"}:
                     if pending_binary is not None:

@@ -80,13 +80,6 @@ class Settings(BaseSettings):
             errors.append("COPILOT_JWT_SECRET must be a unique 32+ character secret")
         if self.credential_master_key is None:
             errors.append("COPILOT_CREDENTIAL_MASTER_KEY is required")
-        if (
-            len(self.local_auth_token) < 32
-            or self.local_auth_token == "development-only-token"
-        ):
-            errors.append(
-                "COPILOT_LOCAL_AUTH_TOKEN must be a unique 32+ character secret"
-            )
         if not self.force_https:
             errors.append("COPILOT_FORCE_HTTPS must be true")
         if not self.parsed_cors_origins or "*" in self.parsed_cors_origins:

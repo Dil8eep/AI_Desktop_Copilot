@@ -108,7 +108,7 @@ Use `electron-builder` with NSIS:
 
 ## Implementation gates
 
-### F1 -- Production authentication and protocol
+### F1 -- Production authentication and protocol (implemented)
 
 - Make `X-Copilot-Token` development-only.
 - Add explicit `screen.text` and sourced audio-chunk protocol handling.

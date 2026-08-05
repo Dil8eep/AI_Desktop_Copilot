@@ -147,3 +147,15 @@ def test_screen_prompt_solves_detected_questions_without_follow_up() -> None:
     assert "time and space complexity" in prompt
     assert "no clear question was detected" in prompt
     assert "Which data structure uses FIFO?" in prompt
+
+
+def test_local_ocr_can_clear_stale_screen_image_evidence() -> None:
+    context = ContextService(
+        max_transcript_characters=300,
+        max_screen_characters=1_000,
+    )
+    context.update_screen_image(b"legacy-image", "image/png")
+
+    context.clear_screen_image()
+
+    assert context.get_screen_image() is None

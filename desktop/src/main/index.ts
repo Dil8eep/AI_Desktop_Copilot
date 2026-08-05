@@ -208,6 +208,11 @@ class DesktopRuntime {
   public stopSystemAudio(sessionId: string): void {
     this.backend.stopSystemAudio(sessionId);
   }
+  public sendScreenText(text: string): string {
+    this.showOverlay();
+    return this.backend.sendScreenText(text);
+  }
+
   public sendScreenCapture(image: Uint8Array, mimeType: string): string {
     this.showOverlay();
     return this.backend.sendScreenCapture(image, mimeType);
@@ -217,8 +222,9 @@ class DesktopRuntime {
     sessionId: string,
     audio: Uint8Array,
     sampleRateHz: number,
+    source: "microphone" | "system-audio" = "microphone",
   ): boolean {
-    return this.backend.sendAudioChunk(sessionId, audio, sampleRateHz);
+    return this.backend.sendAudioChunk(sessionId, audio, sampleRateHz, source);
   }
   public showSettings(): void {
     this.windows.settings.show();
@@ -321,6 +327,12 @@ const registerIpc = (runtime: DesktopRuntime, config: DesktopRuntimeConfig): voi
     }
     runtime.stopSystemAudio(sessionId);
   });
+  ipcMain.handle("screen:text", (_event, text: unknown) => {
+    if (typeof text !== "string") {
+      throw new Error("Screen text must be text.");
+    }
+    return runtime.sendScreenText(text);
+  });
   ipcMain.handle("screen:capture", (_event, image: Uint8Array, mimeType: unknown) => {
     if (!(image instanceof Uint8Array) || typeof mimeType !== "string") {
       throw new Error("Screen capture data is invalid.");
@@ -329,15 +341,27 @@ const registerIpc = (runtime: DesktopRuntime, config: DesktopRuntimeConfig): voi
   });
   ipcMain.handle(
     "audio:chunk",
-    (_event, sessionId: unknown, audio: Uint8Array, sampleRateHz: unknown) => {
+    (
+      _event,
+      sessionId: unknown,
+      audio: Uint8Array,
+      sampleRateHz: unknown,
+      source: unknown,
+    ) => {
       if (
         typeof sessionId !== "string" ||
         !(audio instanceof Uint8Array) ||
-        typeof sampleRateHz !== "number"
+        typeof sampleRateHz !== "number" ||
+        (source !== undefined && source !== "microphone" && source !== "system-audio")
       ) {
         throw new Error("Audio chunk data is invalid.");
       }
-      return runtime.sendAudioChunk(sessionId, audio, sampleRateHz);
+      return runtime.sendAudioChunk(
+        sessionId,
+        audio,
+        sampleRateHz,
+        source as "microphone" | "system-audio" | undefined,
+      );
     },
   );
   ipcMain.handle("overlay:start-session", () => runtime.startPreparedOverlaySession());
@@ -380,7 +404,10 @@ const bootstrap = async (): Promise<void> => {
   const windows = createWindows();
   const backend = new BackendSocketClient({
     url: config.websocketUrl,
-    localToken: process.env.COPILOT_LOCAL_AUTH_TOKEN ?? "development-only-token",
+    localToken:
+      config.environment === "development"
+        ? (process.env.COPILOT_LOCAL_AUTH_TOKEN ?? "development-only-token")
+        : undefined,
     reconnectDelayMs: 1_500,
   });
   const runtime = new DesktopRuntime(backend, windows);

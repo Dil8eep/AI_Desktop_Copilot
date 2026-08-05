@@ -3,7 +3,7 @@
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from pydantic import ValidationError
+from pydantic import SecretStr, ValidationError
 
 from app.api.security import RateLimitMiddleware, SecurityHeadersMiddleware
 from app.infrastructure.credential_invalidation_listener import (
@@ -19,7 +19,9 @@ def test_production_settings_reject_development_security_defaults() -> None:
             database_url="postgresql+asyncpg://user:password@db.example/prod",
             jwt_secret="development-change-this-secret",
             local_auth_token="development-only-token",
-            credential_master_key="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+            credential_master_key=SecretStr(
+                "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+            ),
             force_https=False,
             cors_origins="*",
             allowed_hosts="*",

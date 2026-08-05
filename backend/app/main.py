@@ -359,6 +359,7 @@ def create_application(settings: Settings | None = None) -> FastAPI:
             container.settings.console_transcript_logging,
             container.system_audio_capture_factory,
             container.jwt_service,
+            require_local_token=container.settings.environment != "production",
         ),
     )
     return application

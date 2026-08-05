@@ -73,6 +73,9 @@ class ConversationContext(Protocol):
     def update_screen_image(self, image_bytes: bytes, mime_type: str) -> None:
         """Store one bounded user-authorized screen image for vision analysis."""
 
+    def clear_screen_image(self) -> None:
+        """Discard image evidence when local OCR text supersedes it."""
+
     def get_screen_image(self) -> tuple[bytes, str] | None:
         """Return the latest authorized screen image, if available."""
 

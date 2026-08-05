@@ -34,11 +34,13 @@ export type DesktopApi = Readonly<{
   ) => Promise<void>;
   startSystemAudio: () => Promise<string>;
   stopSystemAudio: (sessionId: string) => Promise<void>;
+  sendScreenText: (text: string) => Promise<string>;
   sendScreenCapture: (image: Uint8Array, mimeType: string) => Promise<string>;
   sendAudioChunk: (
     sessionId: string,
     audio: Uint8Array,
     sampleRateHz: number,
+    source?: "microphone" | "system-audio",
   ) => Promise<boolean>;
   startOverlaySession: () => Promise<void>;
   showOverlay: () => Promise<void>;

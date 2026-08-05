@@ -86,4 +86,62 @@ describe("BackendSocketClient", () => {
     await expect(streamed).resolves.toBe("streamed");
     client.shutdown();
   });
+
+  it("uses JWT-only production headers and sends local capture metadata", async () => {
+    const server = new WebSocketServer({ port: 0 });
+    servers.push(server);
+    await once(server, "listening");
+    const address = server.address();
+    if (typeof address === "string" || address === null) {
+      throw new Error("Expected a TCP test server.");
+    }
+
+    const commands = waitFor<Record<string, unknown>[]>((resolve) => {
+      server.on("connection", (socket, request) => {
+        expect(request.headers["x-copilot-token"]).toBeUndefined();
+        expect(request.headers.authorization).toBe("Bearer production-jwt");
+        const received: Record<string, unknown>[] = [];
+        socket.on("message", (raw, isBinary) => {
+          if (isBinary) return;
+          received.push(JSON.parse(raw.toString()) as Record<string, unknown>);
+          if (received.length === 2) resolve(received);
+        });
+      });
+    });
+
+    const client = new BackendSocketClient({
+      url: `ws://127.0.0.1:${address.port}`,
+      reconnectDelayMs: 10,
+    });
+    const connected = waitFor<void>((resolve) => {
+      client.onStatus((status) => {
+        if (status === "connected") resolve();
+      });
+    });
+    client.setAccessToken("production-jwt");
+    client.start();
+    await connected;
+
+    client.sendScreenText("What is the correct answer?");
+    expect(
+      client.sendAudioChunk(
+        "audio-session",
+        new Uint8Array([1, 2]),
+        16_000,
+        "system-audio",
+      ),
+    ).toBe(true);
+
+    const [screenCommand, audioCommand] = await commands;
+    expect(screenCommand.event).toBe("screen.text");
+    expect(screenCommand.payload).toEqual({ text: "What is the correct answer?" });
+    expect(audioCommand.event).toBe("audio.chunk");
+    expect(audioCommand.payload).toEqual({
+      mimeType: "audio/pcm;codec=s16le",
+      sampleRateHz: 16_000,
+      source: "system-audio",
+      byteLength: 2,
+    });
+    client.shutdown();
+  });
 });

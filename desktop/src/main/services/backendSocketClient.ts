@@ -10,7 +10,7 @@ type Listener<T> = (value: T) => void;
 
 type BackendSocketOptions = Readonly<{
   url: string;
-  localToken: string;
+  localToken?: string;
   reconnectDelayMs: number;
 }>;
 
@@ -135,6 +135,19 @@ export class BackendSocketClient {
   public stopSystemAudio(sessionId: string): void {
     this.sendControlEvent("system_audio.stop", sessionId);
   }
+  public sendScreenText(text: string): string {
+    const normalized = text.trim();
+    if (!normalized) {
+      throw new Error("Screen text is required.");
+    }
+    if (normalized.length > 12_000) {
+      throw new Error("Screen text exceeds the 12,000 character limit.");
+    }
+    const sessionId = randomUUID();
+    this.sendJsonEvent("screen.text", sessionId, { text: normalized });
+    return sessionId;
+  }
+
   public sendScreenCapture(image: Uint8Array, mimeType: string): string {
     if (this.socket?.readyState !== WebSocket.OPEN) {
       throw new Error("The configured backend is not connected.");
@@ -148,6 +161,7 @@ export class BackendSocketClient {
     sessionId: string,
     audio: Uint8Array,
     sampleRateHz: number,
+    source: "microphone" | "system-audio" = "microphone",
   ): boolean {
     if (!Number.isInteger(sampleRateHz) || sampleRateHz !== 16_000) {
       throw new Error("Audio must be 16 kHz PCM.");
@@ -158,9 +172,30 @@ export class BackendSocketClient {
     this.sendBinaryEvent("audio.chunk", sessionId, audio, {
       mimeType: "audio/pcm;codec=s16le",
       sampleRateHz,
+      source,
     });
     return true;
   }
+  private sendJsonEvent(
+    event: "screen.text",
+    sessionId: string,
+    payload: Record<string, unknown>,
+  ): void {
+    if (this.socket?.readyState !== WebSocket.OPEN) {
+      throw new Error("The configured backend is not connected.");
+    }
+    this.socket.send(
+      JSON.stringify({
+        version: "1.0",
+        event,
+        sessionId,
+        requestId: randomUUID(),
+        timestamp: new Date().toISOString(),
+        payload,
+      }),
+    );
+  }
+
   private sendControlEvent(
     event: "system_audio.start" | "system_audio.stop",
     sessionId: string,
@@ -207,7 +242,9 @@ export class BackendSocketClient {
     this.publishStatus("connecting");
     const socket = new WebSocket(this.options.url, {
       headers: {
-        "x-copilot-token": this.options.localToken,
+        ...(this.options.localToken
+          ? { "x-copilot-token": this.options.localToken }
+          : {}),
         ...(this.accessToken ? { Authorization: `Bearer ${this.accessToken}` } : {}),
       },
     });

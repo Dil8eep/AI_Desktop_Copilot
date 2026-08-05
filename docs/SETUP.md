@@ -25,8 +25,9 @@ cd C:\Users\dileep\Desktop\ND\backend
 uvicorn app.main:app --host 127.0.0.1 --port 8765
 ```
 
-The backend is loopback-only. The default development token is shared with the
-desktop app; production startup will generate a different token per launch.
+The local backend is loopback-only. Development uses a shared per-launch local
+token in addition to the signed-in user JWT. Hosted production WebSockets use
+the user JWT over WSS and do not distribute a shared backend token.
 Visit `http://127.0.0.1:8765/docs` for the generated FastAPI reference and
 `http://127.0.0.1:8765/health` for a health check.
 

@@ -107,6 +107,7 @@ async def test_valid_credential_is_encrypted_then_activated() -> None:
     )
 
     assert result.activated is True
+    assert repository.pending is not None
     assert repository.activated == repository.pending["id"]
     assert b"sk-private-value" not in repository.pending["ciphertext"]
     assert repository.audits == [("success", "openai")]

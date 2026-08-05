@@ -28,6 +28,10 @@ class ContextService:
         if image_bytes and mime_type in {"image/jpeg", "image/png"}:
             self._screen_image = (image_bytes, mime_type)
 
+    def clear_screen_image(self) -> None:
+        """Discard prior image bytes when local OCR text becomes authoritative."""
+        self._screen_image = None
+
     def get_screen_image(self) -> tuple[bytes, str] | None:
         """Return the latest authorized screen image for a vision-capable LLM."""
         return self._screen_image

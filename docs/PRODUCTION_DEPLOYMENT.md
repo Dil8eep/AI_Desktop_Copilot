@@ -26,11 +26,10 @@ Run these locally from `backend` and copy each output directly into Render. Gene
 
 ```powershell
 .\.venv\Scripts\python.exe -c "import secrets; print(secrets.token_urlsafe(48))"
-.\.venv\Scripts\python.exe -c "import secrets; print(secrets.token_urlsafe(48))"
 .\.venv\Scripts\python.exe -c "import base64,secrets; print(base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())"
 ```
 
-Use the outputs for `COPILOT_JWT_SECRET`, `COPILOT_LOCAL_AUTH_TOKEN`, and `COPILOT_CREDENTIAL_MASTER_KEY` respectively. Keep an encrypted offline backup of the master key. Losing it makes stored OpenAI and Groq credentials undecryptable; changing it without re-encrypting existing records has the same effect.
+Use the outputs for `COPILOT_JWT_SECRET` and `COPILOT_CREDENTIAL_MASTER_KEY` respectively. Keep an encrypted offline backup of the master key. Losing it makes stored OpenAI and Groq credentials undecryptable; changing it without re-encrypting existing records has the same effect.
 
 ## 3. Deploy the backend on Render
 
@@ -73,14 +72,13 @@ The desktop application remains installed and running locally. Set the Electron 
 $env:COPILOT_DESKTOP_ENVIRONMENT="production"
 $env:COPILOT_API_BASE_URL="https://YOUR_RENDER_SERVICE.onrender.com"
 $env:COPILOT_WS_URL="wss://YOUR_RENDER_SERVICE.onrender.com/ws"
-$env:COPILOT_LOCAL_AUTH_TOKEN="THE_MATCHING_RENDER_BACKEND_TOKEN"
 ```
 
 `COPILOT_WS_URL` is optional and is derived from `COPILOT_API_BASE_URL` when omitted. Development defaults remain `http://127.0.0.1:8765` and `ws://127.0.0.1:8765/ws`. Production startup rejects non-HTTPS API URLs, non-WSS WebSocket URLs, embedded URL credentials, query strings, fragments, and unexpected paths.
 
-The renderer receives only safe runtime metadata such as the API base URL; the local authentication token remains in the Electron main process. Do not deploy the Electron dashboard itself to Vercel: browser sandboxes cannot provide the existing transparent overlay and WASAPI behavior.
+The renderer receives only safe runtime metadata such as the API base URL. Production WebSockets authenticate with the signed-in user JWT over WSS; no shared backend token is distributed to desktop installations. Do not deploy the Electron dashboard itself to Vercel: browser sandboxes cannot provide the existing transparent overlay and Windows capture behavior.
 
-The backend `COPILOT_LOCAL_AUTH_TOKEN` and matching desktop value must be distributed through a secure installation/configuration channel, not embedded in a public web bundle. Installer-managed first-run provisioning remains a later milestone.
+`COPILOT_LOCAL_AUTH_TOKEN` is development-only and must not be embedded in a production installer. Until Milestone F2/F3 local-helper integration is complete, the hosted desktop can use REST, user LLM, and WebSocket features, but production WASAPI and local OCR capture are not yet release-ready.
 
 ## Operational checks
 

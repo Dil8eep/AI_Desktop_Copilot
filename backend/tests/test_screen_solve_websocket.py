@@ -129,3 +129,106 @@ def test_screen_capture_solves_even_when_speech_auto_response_is_disabled() -> N
     assert request.user_id == user_id
     assert request.image_bytes == b"img"
     assert request.image_mime_type == "image/png"
+
+
+def test_local_screen_text_solves_without_uploading_an_image() -> None:
+    streamer = RecordingLlmStreamer()
+    application = FastAPI()
+    user_id = str(uuid4())
+    jwt_service = JwtService("screen-test-secret-that-is-over-32-bytes", 15)
+    application.add_api_websocket_route(
+        "/ws",
+        create_websocket_endpoint(
+            SessionService(InMemorySessionRepository(), streamer),
+            QuestionPerception(),
+            UnusedAudioIngestor(),
+            "test-token",
+            lambda: ContextService(1_000, 2_000),
+            False,
+            False,
+            UnusedSystemAudioCapture,
+            jwt_service,
+        ),
+    )
+    session_id = str(uuid4())
+
+    with TestClient(application) as client:
+        with client.websocket_connect(
+            "/ws",
+            headers={
+                "x-copilot-token": "test-token",
+                "authorization": f"Bearer {jwt_service.issue_access_token(user_id)}",
+            },
+        ) as websocket:
+            websocket.receive_json()
+            websocket.send_json(
+                {
+                    "version": "1.0",
+                    "event": "screen.text",
+                    "sessionId": session_id,
+                    "requestId": str(uuid4()),
+                    "timestamp": "2026-08-05T00:00:00Z",
+                    "payload": {
+                        "text": "Which data structure uses FIFO? A. Stack B. Queue"
+                    },
+                }
+            )
+            events: list[dict[str, object]] = []
+            while not events or events[-1]["event"] != "llm.completed":
+                events.append(websocket.receive_json())
+
+    assert [event["event"] for event in events] == [
+        "context.updated",
+        "llm.token",
+        "llm.completed",
+    ]
+    assert len(streamer.requests) == 1
+    request = streamer.requests[0]
+    assert request.user_id == user_id
+    assert request.image_bytes is None
+    assert request.image_mime_type is None
+
+
+def test_local_screen_text_rejects_oversized_payload() -> None:
+    application = FastAPI()
+    jwt_service = JwtService("screen-test-secret-that-is-over-32-bytes", 15)
+    application.add_api_websocket_route(
+        "/ws",
+        create_websocket_endpoint(
+            SessionService(InMemorySessionRepository(), RecordingLlmStreamer()),
+            QuestionPerception(),
+            UnusedAudioIngestor(),
+            "test-token",
+            lambda: ContextService(1_000, 2_000),
+            False,
+            False,
+            UnusedSystemAudioCapture,
+            jwt_service,
+        ),
+    )
+
+    with TestClient(application) as client:
+        with client.websocket_connect(
+            "/ws",
+            headers={
+                "x-copilot-token": "test-token",
+                "authorization": (
+                    f"Bearer {jwt_service.issue_access_token(str(uuid4()))}"
+                ),
+            },
+        ) as websocket:
+            websocket.receive_json()
+            websocket.send_json(
+                {
+                    "version": "1.0",
+                    "event": "screen.text",
+                    "sessionId": str(uuid4()),
+                    "requestId": str(uuid4()),
+                    "timestamp": "2026-08-05T00:00:00Z",
+                    "payload": {"text": "x" * 12_001},
+                }
+            )
+            error = websocket.receive_json()
+
+    assert error["event"] == "protocol.error"
+    assert error["payload"] == {"code": "screen_text_too_large"}

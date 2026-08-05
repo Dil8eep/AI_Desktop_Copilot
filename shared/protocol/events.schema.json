@@ -4,15 +4,38 @@
   "title": "AI Desktop Copilot Event Envelope",
   "type": "object",
   "additionalProperties": false,
-  "required": ["version", "event", "sessionId", "requestId", "timestamp", "payload"],
+  "required": [
+    "version",
+    "event",
+    "sessionId",
+    "requestId",
+    "timestamp",
+    "payload"
+  ],
   "properties": {
     "version": { "const": "1.0" },
     "event": {
       "enum": [
-        "system.ready", "session.start", "session.stop", "audio.chunk", "audio.segmented",
-        "screen.capture", "settings.update", "speech.partial", "speech.final",
-        "vision.updated", "context.updated", "llm.token", "llm.completed",
-        "overlay.update", "protocol.error"
+        "system.ready",
+        "session.start",
+        "session.stop",
+        "audio.chunk",
+        "audio.segmented",
+        "system_audio.start",
+        "system_audio.stop",
+        "system_audio.started",
+        "system_audio.stopped",
+        "screen.capture",
+        "screen.text",
+        "settings.update",
+        "speech.partial",
+        "speech.final",
+        "vision.updated",
+        "context.updated",
+        "llm.token",
+        "llm.completed",
+        "overlay.update",
+        "protocol.error"
       ]
     },
     "sessionId": { "type": "string", "format": "uuid" },
@@ -23,11 +46,21 @@
   "allOf": [
     {
       "if": { "properties": { "event": { "const": "session.start" } } },
-      "then": { "properties": { "payload": { "$ref": "#/$defs/sessionStart" } } }
+      "then": {
+        "properties": { "payload": { "$ref": "#/$defs/sessionStart" } }
+      }
     },
     {
       "if": { "properties": { "event": { "const": "session.stop" } } },
       "then": { "properties": { "payload": { "$ref": "#/$defs/sessionStop" } } }
+    },
+    {
+      "if": { "properties": { "event": { "const": "screen.text" } } },
+      "then": { "properties": { "payload": { "$ref": "#/$defs/screenText" } } }
+    },
+    {
+      "if": { "properties": { "event": { "const": "audio.chunk" } } },
+      "then": { "properties": { "payload": { "$ref": "#/$defs/audioChunk" } } }
     },
     {
       "if": { "properties": { "event": { "const": "llm.token" } } },
@@ -35,11 +68,15 @@
     },
     {
       "if": { "properties": { "event": { "const": "llm.completed" } } },
-      "then": { "properties": { "payload": { "$ref": "#/$defs/llmCompleted" } } }
+      "then": {
+        "properties": { "payload": { "$ref": "#/$defs/llmCompleted" } }
+      }
     },
     {
       "if": { "properties": { "event": { "const": "protocol.error" } } },
-      "then": { "properties": { "payload": { "$ref": "#/$defs/protocolError" } } }
+      "then": {
+        "properties": { "payload": { "$ref": "#/$defs/protocolError" } }
+      }
     }
   ],
   "$defs": {
@@ -47,9 +84,30 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["prompt"],
-      "properties": { "prompt": { "type": "string", "minLength": 1, "maxLength": 8000 } }
+      "properties": {
+        "prompt": { "type": "string", "minLength": 1, "maxLength": 8000 }
+      }
     },
     "sessionStop": { "type": "object", "additionalProperties": false },
+    "screenText": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text"],
+      "properties": {
+        "text": { "type": "string", "minLength": 1, "maxLength": 12000 }
+      }
+    },
+    "audioChunk": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mimeType", "sampleRateHz", "source", "byteLength"],
+      "properties": {
+        "mimeType": { "const": "audio/pcm;codec=s16le" },
+        "sampleRateHz": { "const": 16000 },
+        "source": { "enum": ["microphone", "system-audio"] },
+        "byteLength": { "type": "integer", "minimum": 1, "maximum": 65536 }
+      }
+    },
     "llmToken": {
       "type": "object",
       "additionalProperties": false,
@@ -60,7 +118,9 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["reason"],
-      "properties": { "reason": { "enum": ["completed", "cancelled", "failed"] } }
+      "properties": {
+        "reason": { "enum": ["completed", "cancelled", "failed"] }
+      }
     },
     "protocolError": {
       "type": "object",
