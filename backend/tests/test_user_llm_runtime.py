@@ -25,21 +25,28 @@ class RecordingRuntime(UserLlmRuntime):
     def __init__(self, credentials: FakeCredentials) -> None:
         super().__init__(credentials, 5)  # type: ignore[arg-type]
         self.adapters: list[str] = []
+        self.requests: list[LlmRequest] = []
 
     async def _stream_openai(self, *args: object) -> AsyncIterator[LlmDelta]:
-        del args
+        self.requests.append(
+            next(item for item in args if isinstance(item, LlmRequest))
+        )
         self.adapters.append("openai")
         yield LlmDelta("ok")
 
     async def _stream_compatible(
         self, provider: str, *args: object
     ) -> AsyncIterator[LlmDelta]:
-        del args
+        self.requests.append(
+            next(item for item in args if isinstance(item, LlmRequest))
+        )
         self.adapters.append(provider)
         yield LlmDelta("ok")
 
     async def _stream_ollama(self, *args: object) -> AsyncIterator[LlmDelta]:
-        del args
+        self.requests.append(
+            next(item for item in args if isinstance(item, LlmRequest))
+        )
         self.adapters.append("ollama_cloud")
         yield LlmDelta("ok")
 
@@ -63,7 +70,7 @@ async def test_routes_each_supported_provider_for_authenticated_user(
 
 
 @pytest.mark.asyncio
-async def test_rejects_unbound_user_and_unsupported_image_provider() -> None:
+async def test_requires_user_and_uses_ocr_text_for_text_only_provider() -> None:
     runtime = RecordingRuntime(FakeCredentials("groq"))
     with pytest.raises(LlmStreamError, match="llm_user_required"):
         _ = [
@@ -80,5 +87,10 @@ async def test_rejects_unbound_user_and_unsupported_image_provider() -> None:
         image_bytes=b"image",
         image_mime_type="image/png",
     )
-    with pytest.raises(LlmStreamError, match="provider_model_image_not_supported"):
-        _ = [delta.text async for delta in runtime.stream(request, asyncio.Event())]
+    deltas = [delta.text async for delta in runtime.stream(request, asyncio.Event())]
+
+    assert deltas == ["ok"]
+    routed = runtime.requests[-1]
+    assert routed.prompt == "solve"
+    assert routed.image_bytes is None
+    assert routed.image_mime_type is None

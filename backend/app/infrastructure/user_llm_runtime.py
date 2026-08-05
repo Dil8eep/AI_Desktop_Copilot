@@ -4,6 +4,7 @@ import asyncio
 import json
 from base64 import b64encode
 from collections.abc import AsyncIterator
+from dataclasses import replace
 from typing import Any, cast
 from uuid import uuid4
 
@@ -36,14 +37,22 @@ class UserLlmRuntime:
             raise LlmStreamError("llm_user_required")
         try:
             resolved = await self._credentials.resolve(request.user_id)
+            routed_request = request
             if (
                 request.image_bytes is not None
                 and resolved.provider not in _IMAGE_PROVIDERS
             ):
-                raise LlmStreamError("provider_model_image_not_supported")
+                # LiteParse OCR is already embedded in the prompt. Text-only providers
+                # receive that extracted content without the original image attachment.
+                routed_request = replace(
+                    request, image_bytes=None, image_mime_type=None
+                )
             if resolved.provider == "openai":
                 async for delta in self._stream_openai(
-                    resolved.credential, resolved.model, request, cancellation_requested
+                    resolved.credential,
+                    resolved.model,
+                    routed_request,
+                    cancellation_requested,
                 ):
                     yield delta
                 return
@@ -52,14 +61,17 @@ class UserLlmRuntime:
                     resolved.provider,
                     resolved.credential,
                     resolved.model,
-                    request,
+                    routed_request,
                     cancellation_requested,
                 ):
                     yield delta
                 return
             if resolved.provider == "ollama_cloud":
                 async for delta in self._stream_ollama(
-                    resolved.credential, resolved.model, request, cancellation_requested
+                    resolved.credential,
+                    resolved.model,
+                    routed_request,
+                    cancellation_requested,
                 ):
                     yield delta
                 return
@@ -142,7 +154,7 @@ class UserLlmRuntime:
         cancellation_requested: asyncio.Event,
     ) -> AsyncIterator[LlmDelta]:
         try:
-            from ollama import AsyncClient  # type: ignore[import-not-found]
+            from ollama import AsyncClient
         except ImportError as error:
             raise LlmStreamError("ollama_client_unavailable") from error
         client = AsyncClient(
