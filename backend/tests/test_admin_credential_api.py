@@ -103,11 +103,11 @@ def test_validation_accepts_model_and_key_without_password() -> None:
     token = jwt_service.issue_access_token("admin-user")
 
     response = client.post(
-        "/api/admin/providers/openai/validate",
+        "/api/admin/providers/groq/validate",
         headers={"Authorization": f"Bearer {token}"},
         json={
             "credential": "test-provider-credential-value",
-            "model": "gpt-test",
+            "model": "whisper-large-v3",
         },
     )
 
@@ -122,17 +122,35 @@ def test_replacement_response_never_contains_submitted_secrets() -> None:
     token = jwt_service.issue_access_token("admin-user")
 
     response = client.put(
-        "/api/admin/providers/openai/credential",
+        "/api/admin/providers/groq/credential",
         headers={"Authorization": f"Bearer {token}"},
         json={
             "credential": "test-provider-credential-value",
-            "currentPassword": "test-admin-password",
-            "model": "gpt-test",
+            "model": "whisper-large-v3",
         },
     )
 
     assert response.status_code == 200
     assert credentials.activated is True
     assert "test-provider-credential-value" not in response.text
-    assert "test-admin-password" not in response.text
     assert response.json()["maskedHint"] == "...alue"
+
+
+def test_admin_llm_credential_management_is_not_available() -> None:
+    validator = Validator(True)
+    client, jwt_service, credentials = build_client(validator)
+    token = jwt_service.issue_access_token("admin-user")
+
+    response = client.put(
+        "/api/admin/providers/openai/credential",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "credential": "test-provider-credential-value",
+            "model": "gpt-4.1-mini",
+        },
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "admin_provider_not_supported"}
+    assert credentials.activated is False
+    assert validator.received is None

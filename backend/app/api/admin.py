@@ -41,19 +41,6 @@ def _disable_caching(response: Response) -> None:
 def _environment_provider_metadata(settings: Settings) -> list[dict[str, object]]:
     return [
         {
-            "provider": "openai",
-            "purpose": "llm",
-            "model": settings.openai_model,
-            "status": (
-                "configured" if settings.openai_api_key is not None else "missing"
-            ),
-            "maskedHint": None,
-            "source": "environment",
-            "lastValidatedAt": None,
-            "lastErrorCode": None,
-            "canRollback": False,
-        },
-        {
             "provider": "groq",
             "purpose": "stt",
             "model": settings.groq_whisper_model,
@@ -63,8 +50,15 @@ def _environment_provider_metadata(settings: Settings) -> list[dict[str, object]
             "lastValidatedAt": None,
             "lastErrorCode": None,
             "canRollback": False,
-        },
+        }
     ]
+
+
+def _require_admin_provider(provider: str) -> str:
+    normalized = provider.strip().lower()
+    if normalized != "groq":
+        raise HTTPException(status_code=404, detail="admin_provider_not_supported")
+    return normalized
 
 
 def create_admin_router(
@@ -151,6 +145,7 @@ def create_admin_router(
         authorization: str | None = Header(default=None),
     ) -> dict[str, object]:
         await require_admin_id(authorization, jwt_service, users)
+        provider = _require_admin_provider(provider)
         if credential_service is None:
             raise HTTPException(
                 status_code=503, detail="credential_master_key_not_configured"
@@ -178,6 +173,7 @@ def create_admin_router(
         authorization: str | None = Header(default=None),
     ) -> dict[str, object]:
         admin_id = await require_admin_id(authorization, jwt_service, users)
+        provider = _require_admin_provider(provider)
         if credential_service is None:
             raise HTTPException(
                 status_code=503, detail="credential_master_key_not_configured"
@@ -216,6 +212,7 @@ def create_admin_router(
         authorization: str | None = Header(default=None),
     ) -> dict[str, object]:
         admin_id = await require_admin_id(authorization, jwt_service, users)
+        provider = _require_admin_provider(provider)
         if credential_service is None:
             raise HTTPException(
                 status_code=503, detail="credential_master_key_not_configured"

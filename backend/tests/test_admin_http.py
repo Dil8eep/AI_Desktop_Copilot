@@ -116,7 +116,11 @@ def test_provider_response_contains_metadata_but_no_secret() -> None:
     assert "private-openai-key" not in body
     assert "private-groq-key" not in body
     assert "ciphertext" not in body
-    assert response.json()["providers"][0]["status"] == "configured"
+    providers = response.json()["providers"]
+    assert len(providers) == 1
+    assert providers[0]["provider"] == "groq"
+    assert providers[0]["purpose"] == "stt"
+    assert providers[0]["status"] == "configured"
 
 
 def test_public_signup_always_returns_user_role() -> None:
