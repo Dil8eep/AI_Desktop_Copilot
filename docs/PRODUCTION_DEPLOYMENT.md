@@ -78,7 +78,7 @@ $env:COPILOT_WS_URL="wss://YOUR_RENDER_SERVICE.onrender.com/ws"
 
 The renderer receives only safe runtime metadata such as the API base URL. Production WebSockets authenticate with the signed-in user JWT over WSS; no shared backend token is distributed to desktop installations. Do not deploy the Electron dashboard itself to Vercel: browser sandboxes cannot provide the existing transparent overlay and Windows capture behavior.
 
-`COPILOT_LOCAL_AUTH_TOKEN` is development-only and must not be embedded in a production installer. Until Milestone F2/F3 local-helper integration is complete, the hosted desktop can use REST, user LLM, and WebSocket features, but production WASAPI and local OCR capture are not yet release-ready.
+`COPILOT_LOCAL_AUTH_TOKEN` is development-only and must not be embedded in a production installer. Milestones F2 and F3 provide the private local-helper and Electron integration for local OCR and Windows WASAPI. The source desktop can use these paths now; a clean-laptop release still requires the packaged helper and installer produced in Milestone F4.
 
 ## Operational checks
 

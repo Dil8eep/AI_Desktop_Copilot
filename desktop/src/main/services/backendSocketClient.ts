@@ -126,15 +126,6 @@ export class BackendSocketClient {
     return this.candidateProfile !== undefined;
   }
 
-  public startSystemAudio(): string {
-    const sessionId = randomUUID();
-    this.sendControlEvent("system_audio.start", sessionId);
-    return sessionId;
-  }
-
-  public stopSystemAudio(sessionId: string): void {
-    this.sendControlEvent("system_audio.stop", sessionId);
-  }
   public sendScreenText(text: string): string {
     const normalized = text.trim();
     if (!normalized) {
@@ -145,15 +136,6 @@ export class BackendSocketClient {
     }
     const sessionId = randomUUID();
     this.sendJsonEvent("screen.text", sessionId, { text: normalized });
-    return sessionId;
-  }
-
-  public sendScreenCapture(image: Uint8Array, mimeType: string): string {
-    if (this.socket?.readyState !== WebSocket.OPEN) {
-      throw new Error("The configured backend is not connected.");
-    }
-    const sessionId = randomUUID();
-    this.sendBinaryEvent("screen.capture", sessionId, image, { mimeType });
     return sessionId;
   }
 
@@ -196,26 +178,8 @@ export class BackendSocketClient {
     );
   }
 
-  private sendControlEvent(
-    event: "system_audio.start" | "system_audio.stop",
-    sessionId: string,
-  ): void {
-    if (this.socket?.readyState !== WebSocket.OPEN) {
-      throw new Error("The configured backend is not connected.");
-    }
-    this.socket.send(
-      JSON.stringify({
-        version: "1.0",
-        event,
-        sessionId,
-        requestId: randomUUID(),
-        timestamp: new Date().toISOString(),
-        payload: {},
-      }),
-    );
-  }
   private sendBinaryEvent(
-    event: "audio.chunk" | "screen.capture",
+    event: "audio.chunk",
     sessionId: string,
     data: Uint8Array,
     payload: Record<string, string | number>,

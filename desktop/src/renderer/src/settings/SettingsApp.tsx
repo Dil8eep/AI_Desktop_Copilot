@@ -104,7 +104,9 @@ export const SettingsApp = (): ReactElement => {
 
   const captureScreen = async (): Promise<void> => {
     setIsCapturingScreen(true);
-    setMessage("Choose a display to analyze. The image stays on your local backend.");
+    setMessage(
+      "Choose a display to analyze. The image is processed locally and is not uploaded.",
+    );
     try {
       const image = await captureDisplay();
       await window.desktopApi.sendScreenCapture(image, "image/jpeg");

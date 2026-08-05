@@ -8,6 +8,7 @@ import {
   nativeImage,
   Tray,
 } from "electron";
+import { randomUUID } from "node:crypto";
 import path from "node:path";
 import type {
   BackendConnectionStatus,
@@ -19,7 +20,12 @@ import {
   resolveDesktopRuntimeConfig,
   type DesktopRuntimeConfig,
 } from "./runtimeConfig";
+import { resolveLocalHelperLaunch } from "./localHelperLaunch";
 import { BackendSocketClient } from "./services/backendSocketClient";
+import {
+  LocalCaptureHelperClient,
+  type LocalHelperMessage,
+} from "./services/localCaptureHelperClient";
 
 const overlayDefaults: OverlayPreferences = { opacity: 0.92, fontSize: 16 };
 
@@ -148,6 +154,7 @@ class DesktopRuntime {
 
   public constructor(
     private readonly backend: BackendSocketClient,
+    private readonly localHelper: LocalCaptureHelperClient,
     private readonly windows: AppWindows,
   ) {}
 
@@ -163,8 +170,9 @@ class DesktopRuntime {
     this.backend.start();
   }
 
-  public shutdown(): void {
+  public async shutdown(): Promise<void> {
     this.backend.shutdown();
+    await this.localHelper.shutdown();
   }
 
   public setAccessToken(accessToken: string | null): void {
@@ -200,22 +208,50 @@ class DesktopRuntime {
     this.showOverlay();
   }
 
-  public startSystemAudio(): string {
+  public async startSystemAudio(): Promise<string> {
     this.showOverlay();
-    return this.backend.startSystemAudio();
+    const sessionId = await this.localHelper.startSystemAudio();
+    this.publishLocalCaptureEvent("system_audio.started", sessionId, {
+      source: "system-audio",
+    });
+    return sessionId;
   }
 
-  public stopSystemAudio(sessionId: string): void {
-    this.backend.stopSystemAudio(sessionId);
+  public async stopSystemAudio(sessionId: string): Promise<void> {
+    await this.localHelper.stopSystemAudio(sessionId);
+    this.publishLocalCaptureEvent("system_audio.stopped", sessionId, {
+      source: "system-audio",
+    });
   }
   public sendScreenText(text: string): string {
     this.showOverlay();
     return this.backend.sendScreenText(text);
   }
 
-  public sendScreenCapture(image: Uint8Array, mimeType: string): string {
+  public async sendScreenCapture(image: Uint8Array, mimeType: string): Promise<string> {
+    if (mimeType !== "image/jpeg" && mimeType !== "image/png") {
+      throw new Error("Screen capture must be JPEG or PNG.");
+    }
     this.showOverlay();
-    return this.backend.sendScreenCapture(image, mimeType);
+    const text = await this.localHelper.analyzeScreen(image, mimeType);
+    return this.backend.sendScreenText(text);
+  }
+
+  public handleLocalHelperEvent(event: LocalHelperMessage): void {
+    if (event.event === "helper.error") {
+      this.publishLocalCaptureEvent("protocol.error", event.id ?? randomUUID(), {
+        code:
+          typeof event.payload.code === "string"
+            ? event.payload.code
+            : "local_capture_unavailable",
+      });
+      return;
+    }
+    if (event.event === "audio.stopped" && event.id) {
+      this.publishLocalCaptureEvent("system_audio.stopped", event.id, {
+        source: "system-audio",
+      });
+    }
   }
 
   public sendAudioChunk(
@@ -262,6 +298,20 @@ class DesktopRuntime {
     }
     this.overlayPreferences = preferences;
     this.applyOverlayPreferences(preferences);
+  }
+
+  private publishLocalCaptureEvent(
+    event: string,
+    sessionId: string,
+    payload: Record<string, unknown>,
+  ): void {
+    this.publish("backend:event", {
+      event,
+      sessionId,
+      requestId: randomUUID(),
+      timestamp: new Date().toISOString(),
+      payload,
+    });
   }
 
   private applyOverlayPreferences(preferences: OverlayPreferences): void {
@@ -410,7 +460,21 @@ const bootstrap = async (): Promise<void> => {
         : undefined,
     reconnectDelayMs: 1_500,
   });
-  const runtime = new DesktopRuntime(backend, windows);
+  const runtimeHolder: { current?: DesktopRuntime } = {};
+  const localHelper = new LocalCaptureHelperClient(
+    resolveLocalHelperLaunch(
+      app.getAppPath(),
+      process.resourcesPath,
+      app.isPackaged,
+      process.env,
+    ),
+    (sessionId, audio, sampleRateHz) => {
+      backend.sendAudioChunk(sessionId, audio, sampleRateHz, "system-audio");
+    },
+    (event) => runtimeHolder.current?.handleLocalHelperEvent(event),
+  );
+  const runtime = new DesktopRuntime(backend, localHelper, windows);
+  runtimeHolder.current = runtime;
   registerIpc(runtime, config);
   await loadWindows(windows);
   const tray = createTray(runtime);
@@ -423,11 +487,15 @@ const bootstrap = async (): Promise<void> => {
       windows.settings.hide();
     }
   });
-  app.on("before-quit", () => {
+  let shutdownStarted = false;
+  app.on("before-quit", (event) => {
+    if (shutdownStarted) return;
+    event.preventDefault();
+    shutdownStarted = true;
     isQuitting = true;
     tray.destroy();
-    runtime.shutdown();
     globalShortcut.unregisterAll();
+    void runtime.shutdown().finally(() => app.quit());
   });
   globalShortcut.register("CommandOrControl+Shift+Space", () =>
     runtime.toggleOverlay(),

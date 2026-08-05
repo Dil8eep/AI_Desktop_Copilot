@@ -120,7 +120,7 @@ Use `electron-builder` with NSIS:
 - Add private IPC, lifecycle management, bounded payloads, and failure codes.
 - Add helper unit/contract tests.
 
-### F3 -- Electron integration
+### F3 -- Electron integration (implemented)
 
 - Route Analyze Screen through local OCR text.
 - Route system audio through local PCM chunks.
