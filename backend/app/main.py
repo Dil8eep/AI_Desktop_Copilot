@@ -15,6 +15,7 @@ from app.api.admin import create_admin_router
 from app.api.auth import create_auth_router
 from app.api.auth_dependencies import require_user_id
 from app.api.security import RateLimitMiddleware, SecurityHeadersMiddleware
+from app.api.user_llm import create_user_llm_router
 from app.api.websocket import create_websocket_endpoint
 from app.application.audio_ingest_service import AudioIngestService
 from app.application.context_service import ContextService
@@ -22,6 +23,7 @@ from app.application.perception_service import PerceptionService
 from app.application.provider_credential_service import ProviderCredentialService
 from app.application.resume_service import ResumeService
 from app.application.session_service import SessionService
+from app.application.user_llm_credential_service import UserLlmCredentialService
 from app.domain.ports import (
     ConversationContext,
     LlmStreamer,
@@ -57,6 +59,12 @@ from app.infrastructure.provider_credential_validator import (
 )
 from app.infrastructure.resume_llm_parser import ResumeLlmParser
 from app.infrastructure.silero_vad_segmenter import SileroVadSegmenter
+from app.infrastructure.user_llm_credential_repository import (
+    UserLlmCredentialRepository,
+)
+from app.infrastructure.user_llm_credential_validator import (
+    LiveUserLlmCredentialValidator,
+)
 from app.infrastructure.user_repository import UserRepository
 from app.infrastructure.wasapi_loopback_capture import WasapiLoopbackCapture
 from app.settings import Settings
@@ -76,6 +84,7 @@ class ApplicationContainer:
     profile_repository: ProfileRepository
     admin_repository: AdminRepository
     credential_service: ProviderCredentialService | None
+    user_llm_credential_service: UserLlmCredentialService | None
     credential_resolver: ProviderCredentialResolver
     credential_invalidation_listener: CredentialInvalidationListener | None
     user_repository: UserRepository
@@ -119,6 +128,7 @@ def build_container(settings: Settings) -> ApplicationContainer:
         credential_resolver, settings.llm_timeout_seconds
     )
     credential_service: ProviderCredentialService | None = None
+    user_llm_credential_service: UserLlmCredentialService | None = None
     credential_invalidation_listener: CredentialInvalidationListener | None = None
     if credential_repository is not None and credential_cipher is not None:
         credential_service = ProviderCredentialService(
@@ -126,6 +136,11 @@ def build_container(settings: Settings) -> ApplicationContainer:
             LiveProviderCredentialValidator(),
             credential_cipher,
             credential_resolver,
+        )
+        user_llm_credential_service = UserLlmCredentialService(
+            UserLlmCredentialRepository(settings.database_url),
+            LiveUserLlmCredentialValidator(settings.llm_timeout_seconds),
+            credential_cipher,
         )
         credential_invalidation_listener = CredentialInvalidationListener(
             settings.database_url, credential_resolver
@@ -195,6 +210,7 @@ def build_container(settings: Settings) -> ApplicationContainer:
         profile_repository=profile_repository,
         admin_repository=admin_repository,
         credential_service=credential_service,
+        user_llm_credential_service=user_llm_credential_service,
         credential_resolver=credential_resolver,
         credential_invalidation_listener=credential_invalidation_listener,
         user_repository=user_repository,
@@ -247,7 +263,7 @@ def create_application(settings: Settings | None = None) -> FastAPI:
         CORSMiddleware,
         allow_origins=container.settings.parsed_cors_origins,
         allow_credentials=False,
-        allow_methods=["GET", "POST", "PUT", "OPTIONS"],
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         allow_headers=[
             "Authorization",
             "Cache-Control",
@@ -266,6 +282,12 @@ def create_application(settings: Settings | None = None) -> FastAPI:
             container.admin_repository,
             container.settings,
             container.credential_service,
+        )
+    )
+    application.include_router(
+        create_user_llm_router(
+            container.jwt_service,
+            container.user_llm_credential_service,
         )
     )
 

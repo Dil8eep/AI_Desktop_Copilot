@@ -5,6 +5,9 @@ from app.infrastructure.profile_repository import ProfileRepository
 from app.infrastructure.provider_credential_repository import (
     ProviderCredentialRepository,
 )
+from app.infrastructure.user_llm_credential_repository import (
+    UserLlmCredentialRepository,
+)
 from app.infrastructure.user_repository import UserRepository
 
 
@@ -22,6 +25,7 @@ class SchemaManager:
                 await ProfileRepository._ensure_schema(connection)
                 await AdminRepository._ensure_schema(connection)
                 await ProviderCredentialRepository._ensure_schema(connection)
+                await UserLlmCredentialRepository._ensure_schema(connection)
                 await self._protect_audit_events(connection)
         finally:
             await connection.close()

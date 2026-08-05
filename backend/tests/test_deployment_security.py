@@ -28,9 +28,7 @@ def test_production_settings_reject_development_security_defaults() -> None:
 
 def test_sensitive_route_rate_limit_and_production_headers() -> None:
     application = FastAPI()
-    application.add_middleware(
-        RateLimitMiddleware, login_limit=2, credential_limit=1
-    )
+    application.add_middleware(RateLimitMiddleware, login_limit=2, credential_limit=1)
     application.add_middleware(SecurityHeadersMiddleware, production=True)
 
     @application.post("/api/auth/login")
@@ -50,6 +48,24 @@ def test_sensitive_route_rate_limit_and_production_headers() -> None:
     assert limited.headers["retry-after"] == "60"
 
 
+def test_user_llm_credentials_are_not_cached_and_are_rate_limited() -> None:
+    application = FastAPI()
+    application.add_middleware(RateLimitMiddleware, login_limit=2, credential_limit=1)
+    application.add_middleware(SecurityHeadersMiddleware, production=False)
+
+    @application.put("/api/llm/config")
+    async def replace_user_llm_config() -> dict[str, str]:
+        return {"status": "ok"}
+
+    with TestClient(application) as client:
+        first = client.put("/api/llm/config")
+        limited = client.put("/api/llm/config")
+
+    assert first.status_code == 200
+    assert first.headers["cache-control"] == "no-store"
+    assert limited.status_code == 429
+
+
 class _Resolver:
     def __init__(self) -> None:
         self.invalidated: list[str] = []
@@ -61,7 +77,8 @@ class _Resolver:
 def test_database_notification_invalidates_only_known_provider() -> None:
     resolver = _Resolver()
     listener = CredentialInvalidationListener(
-        "postgresql://example.invalid/test", resolver  # type: ignore[arg-type]
+        "postgresql://example.invalid/test",
+        resolver,  # type: ignore[arg-type]
     )
 
     listener._on_notification(None, 1, "provider_credential_changed", "openai")

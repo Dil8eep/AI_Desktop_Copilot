@@ -28,7 +28,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["Permissions-Policy"] = "camera=(), geolocation=()"
-        if request.url.path.startswith("/api/admin"):
+        if request.url.path.startswith(("/api/admin", "/api/llm/config")):
             response.headers["Cache-Control"] = "no-store"
         if self._production:
             response.headers["Content-Security-Policy"] = (
@@ -85,6 +85,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if request.method == "POST" and request.url.path == "/api/auth/login":
             return self._login_limit
         if request.url.path.startswith("/api/admin/providers/") and request.method in {
+            "POST",
+            "PUT",
+        }:
+            return self._credential_limit
+        if request.url.path.startswith("/api/llm/config") and request.method in {
             "POST",
             "PUT",
         }:
