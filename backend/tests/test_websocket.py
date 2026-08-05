@@ -5,6 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
+from app.infrastructure.auth_service import JwtService
 from app.main import create_application
 from app.settings import Settings
 
@@ -22,11 +23,24 @@ def _event(
     }
 
 
+_JWT_SECRET = "test-websocket-secret-that-is-over-32-bytes"
+
+
+def _headers(local_token: str = "test-token") -> dict[str, str]:
+    access_token = JwtService(_JWT_SECRET, 15).issue_access_token(str(uuid4()))
+    return {
+        "x-copilot-token": local_token,
+        "authorization": f"Bearer {access_token}",
+    }
+
+
 def _client(token_delay_ms: int = 1) -> TestClient:
     return TestClient(
         create_application(
             Settings(
                 local_auth_token="test-token",
+                jwt_secret=_JWT_SECRET,
+                credential_master_key=None,
                 llm_provider="mock",
                 mock_llm_token_delay_ms=token_delay_ms,
             )
@@ -39,9 +53,7 @@ def test_session_start_streams_multiple_deltas_then_completion() -> None:
     request_id = str(uuid4())
 
     with _client() as client:
-        with client.websocket_connect(
-            "/ws", headers={"x-copilot-token": "test-token"}
-        ) as websocket:
+        with client.websocket_connect("/ws", headers=_headers()) as websocket:
             assert websocket.receive_json()["event"] == "system.ready"
             websocket.send_json(
                 _event("session.start", session_id, request_id, {"prompt": "Help me"})
@@ -63,9 +75,7 @@ def test_session_stop_cancels_an_active_stream() -> None:
     session_id = str(uuid4())
 
     with _client(token_delay_ms=100) as client:
-        with client.websocket_connect(
-            "/ws", headers={"x-copilot-token": "test-token"}
-        ) as websocket:
+        with client.websocket_connect("/ws", headers=_headers()) as websocket:
             websocket.receive_json()
             websocket.send_json(
                 _event(
@@ -81,9 +91,7 @@ def test_session_stop_cancels_an_active_stream() -> None:
 
 def test_invalid_session_payload_returns_typed_protocol_error() -> None:
     with _client() as client:
-        with client.websocket_connect(
-            "/ws", headers={"x-copilot-token": "test-token"}
-        ) as websocket:
+        with client.websocket_connect("/ws", headers=_headers()) as websocket:
             websocket.receive_json()
             websocket.send_json(_event("session.start", str(uuid4()), str(uuid4()), {}))
             error = websocket.receive_json()
@@ -95,8 +103,17 @@ def test_invalid_session_payload_returns_typed_protocol_error() -> None:
 def test_websocket_requires_the_per_launch_local_token() -> None:
     with _client() as client:
         with pytest.raises(WebSocketDisconnect) as error:
+            with client.websocket_connect("/ws", headers=_headers("wrong-token")):
+                pass
+
+    assert error.value.code == 1008
+
+
+def test_websocket_requires_a_valid_user_access_token() -> None:
+    with _client() as client:
+        with pytest.raises(WebSocketDisconnect) as error:
             with client.websocket_connect(
-                "/ws", headers={"x-copilot-token": "wrong-token"}
+                "/ws", headers={"x-copilot-token": "test-token"}
             ):
                 pass
 
@@ -108,9 +125,7 @@ def test_capture_binary_frame_validates_its_declared_media_type() -> None:
     request_id = str(uuid4())
 
     with _client() as client:
-        with client.websocket_connect(
-            "/ws", headers={"x-copilot-token": "test-token"}
-        ) as websocket:
+        with client.websocket_connect("/ws", headers=_headers()) as websocket:
             websocket.receive_json()
             websocket.send_json(
                 _event(

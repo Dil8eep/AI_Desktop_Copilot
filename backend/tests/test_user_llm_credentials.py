@@ -47,6 +47,7 @@ class FakeRepository:
         pending = self.pending[credential_id]
         assert pending["user_id"] == user_id
         self.active_by_user[user_id] = {
+            "id": credential_id,
             "provider": pending["provider"],
             "model": pending["model"],
             "status": "active",
@@ -62,6 +63,19 @@ class FakeRepository:
 
     async def active_metadata(self, user_id: str) -> dict[str, Any] | None:
         return self.active_by_user.get(user_id)
+
+    async def active_material(self, user_id: str) -> dict[str, Any] | None:
+        active = self.active_by_user.get(user_id)
+        if active is None or "id" not in active:
+            return None
+        pending = self.pending[str(active["id"])]
+        return {
+            "id": active["id"],
+            "provider": pending["provider"],
+            "model": pending["model"],
+            "ciphertext": pending["ciphertext"],
+            "nonce": pending["nonce"],
+        }
 
     async def retire_active(self, user_id: str) -> bool:
         return self.active_by_user.pop(user_id, None) is not None
@@ -144,6 +158,22 @@ async def test_valid_key_is_encrypted_and_activated_for_only_its_user() -> None:
     assert result.activated is True
     assert b"user-private-key" not in pending["ciphertext"]
     assert list(repository.active_by_user) == ["11111111-1111-1111-1111-111111111111"]
+
+
+@pytest.mark.asyncio
+async def test_active_configuration_resolves_only_for_its_owner() -> None:
+    repository = FakeRepository()
+    service = build_service(repository, FakeValidator())
+    user_id = "11111111-1111-1111-1111-111111111111"
+    await service.replace(user_id, "ollama_cloud", "private-key", "gpt-oss:120b")
+
+    resolved = await service.resolve(user_id)
+
+    assert resolved.provider == "ollama_cloud"
+    assert resolved.model == "gpt-oss:120b"
+    assert resolved.credential == "private-key"
+    with pytest.raises(ValueError, match="llm_configuration_required"):
+        await service.resolve("22222222-2222-2222-2222-222222222222")
 
 
 @pytest.mark.asyncio

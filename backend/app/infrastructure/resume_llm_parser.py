@@ -27,8 +27,9 @@ class ResumeLlmParser:
         self._model = model
         self._client_factory = client_factory
 
-    async def parse(self, resume_text: str) -> dict[str, Any]:
+    async def parse(self, user_id: str, resume_text: str) -> dict[str, Any]:
         """Return a dynamic profile without inventing missing resume facts."""
+        del user_id
         prompt = (
             "Extract this resume into valid JSON. Detect headings dynamically and "
             "preserve all meaningful information. Use this shape: candidate object "

@@ -39,6 +39,8 @@ class UserLlmCredentialRepository(Protocol):
 
     async def active_metadata(self, user_id: str) -> dict[str, Any] | None: ...
 
+    async def active_material(self, user_id: str) -> dict[str, Any] | None: ...
+
     async def retire_active(self, user_id: str) -> bool: ...
 
     async def append_audit(
@@ -49,6 +51,13 @@ class UserLlmCredentialRepository(Protocol):
         result: str,
         correlation_id: str,
     ) -> None: ...
+
+
+@dataclass(frozen=True)
+class ResolvedUserLlmConfiguration:
+    provider: str
+    model: str
+    credential: str
 
 
 @dataclass(frozen=True)
@@ -155,6 +164,21 @@ class UserLlmCredentialService:
             None,
             correlation_id,
         )
+
+    async def resolve(self, user_id: str) -> ResolvedUserLlmConfiguration:
+        material = await self._repository.active_material(user_id)
+        if material is None:
+            raise ValueError("llm_configuration_required")
+        credential_id = str(material["id"])
+        provider = self.require_provider(str(material["provider"]))
+        model = self.require_model(str(material["model"]))
+        associated_data = f"user:{user_id}:{provider}:llm:{credential_id}"
+        credential = self._cipher.decrypt(
+            bytes(material["nonce"]),
+            bytes(material["ciphertext"]),
+            associated_data,
+        )
+        return ResolvedUserLlmConfiguration(provider, model, credential)
 
     async def metadata(self, user_id: str) -> dict[str, Any] | None:
         return await self._repository.active_metadata(user_id)

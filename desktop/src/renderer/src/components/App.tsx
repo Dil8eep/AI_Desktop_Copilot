@@ -230,6 +230,9 @@ export const App = (): ReactElement => {
   );
 
   useEffect(() => {
+    void window.desktopApi.setAccessToken(accessToken || null);
+  }, [accessToken]);
+  useEffect(() => {
     if (!accessToken || !apiBaseUrl) return;
     const controller = new AbortController();
     setMessage("Signed in. Loading your saved resume profile...");

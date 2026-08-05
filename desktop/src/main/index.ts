@@ -167,6 +167,9 @@ class DesktopRuntime {
     this.backend.shutdown();
   }
 
+  public setAccessToken(accessToken: string | null): void {
+    this.backend.setAccessToken(accessToken);
+  }
   public getBackendStatus(): BackendConnectionStatus {
     return this.backend.getStatus();
   }
@@ -284,6 +287,12 @@ const registerIpc = (runtime: DesktopRuntime, config: DesktopRuntimeConfig): voi
   }));
   ipcMain.handle("backend:get-status", () => runtime.getBackendStatus());
   ipcMain.handle("profile:get-status", () => runtime.getCandidateProfileReady());
+  ipcMain.handle("auth:set-access-token", (_event, accessToken: unknown) => {
+    if (accessToken !== null && typeof accessToken !== "string") {
+      throw new Error("Access token must be text or null.");
+    }
+    runtime.setAccessToken(accessToken as string | null);
+  });
   ipcMain.handle(
     "backend:start-session",
     (_event, prompt: unknown, includeCandidateProfile: unknown) => {

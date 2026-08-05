@@ -6,6 +6,8 @@ const api: DesktopApi = {
   quit: () => ipcRenderer.invoke("app:quit"),
   getBackendStatus: () => ipcRenderer.invoke("backend:get-status"),
   getCandidateProfileReady: () => ipcRenderer.invoke("profile:get-status"),
+  setAccessToken: (accessToken) =>
+    ipcRenderer.invoke("auth:set-access-token", accessToken),
   startSession: (prompt, includeCandidateProfile) =>
     ipcRenderer.invoke("backend:start-session", prompt, includeCandidateProfile),
   setCandidateProfileContext: (profile) =>

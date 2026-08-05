@@ -27,6 +27,7 @@ export type DesktopApi = Readonly<{
   quit: () => Promise<void>;
   getBackendStatus: () => Promise<BackendConnectionStatus>;
   getCandidateProfileReady: () => Promise<boolean>;
+  setAccessToken: (accessToken: string | null) => Promise<void>;
   startSession: (prompt: string, includeCandidateProfile?: boolean) => Promise<string>;
   setCandidateProfileContext: (
     profile: CandidateProfileContext | null,

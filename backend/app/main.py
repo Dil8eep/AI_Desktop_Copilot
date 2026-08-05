@@ -24,9 +24,11 @@ from app.application.provider_credential_service import ProviderCredentialServic
 from app.application.resume_service import ResumeService
 from app.application.session_service import SessionService
 from app.application.user_llm_credential_service import UserLlmCredentialService
+from app.domain.llm import LlmStreamError
 from app.domain.ports import (
     ConversationContext,
     LlmStreamer,
+    ResumeProfileParser,
     SessionRepository,
     SpeechTranscriber,
     SystemAudioCapture,
@@ -44,7 +46,6 @@ from app.infrastructure.groq_whisper_transcriber import (
 from app.infrastructure.in_memory_session_repository import InMemorySessionRepository
 from app.infrastructure.liteparse_screen_analyzer import LiteParseScreenAnalyzer
 from app.infrastructure.mock_llm_streamer import MockLlmStreamer
-from app.infrastructure.openai_llm_streamer import OpenAiLlmStreamer
 from app.infrastructure.profile_repository import ProfileRepository
 from app.infrastructure.provider_client_factory import ProviderClientFactory
 from app.infrastructure.provider_credential_repository import (
@@ -57,7 +58,6 @@ from app.infrastructure.provider_credential_resolver import (
 from app.infrastructure.provider_credential_validator import (
     LiveProviderCredentialValidator,
 )
-from app.infrastructure.resume_llm_parser import ResumeLlmParser
 from app.infrastructure.silero_vad_segmenter import SileroVadSegmenter
 from app.infrastructure.user_llm_credential_repository import (
     UserLlmCredentialRepository,
@@ -65,6 +65,7 @@ from app.infrastructure.user_llm_credential_repository import (
 from app.infrastructure.user_llm_credential_validator import (
     LiveUserLlmCredentialValidator,
 )
+from app.infrastructure.user_llm_runtime import UserLlmRuntime
 from app.infrastructure.user_repository import UserRepository
 from app.infrastructure.wasapi_loopback_capture import WasapiLoopbackCapture
 from app.settings import Settings
@@ -80,7 +81,7 @@ class ApplicationContainer:
     session_service: SessionService
     perception_service: PerceptionService
     resume_service: ResumeService
-    resume_parser: ResumeLlmParser | None
+    resume_parser: ResumeProfileParser | None
     profile_repository: ProfileRepository
     admin_repository: AdminRepository
     credential_service: ProviderCredentialService | None
@@ -147,19 +148,14 @@ def build_container(settings: Settings) -> ApplicationContainer:
         )
 
     llm_streamer: LlmStreamer
-    openai_runtime_available = bool(openai_key) or credential_repository is not None
-    if settings.llm_provider == "openai" and openai_runtime_available:
-        llm_streamer = OpenAiLlmStreamer(
-            api_key=None,
-            model=settings.openai_model,
-            timeout_seconds=settings.llm_timeout_seconds,
-            client_factory=client_factory,
+    if user_llm_credential_service is not None:
+        llm_streamer = UserLlmRuntime(
+            user_llm_credential_service, settings.llm_timeout_seconds
         )
     else:
         llm_streamer = MockLlmStreamer(
             token_delay_seconds=settings.mock_llm_token_delay_ms / 1_000
         )
-
     perception_service = PerceptionService(LiteParseScreenAnalyzer())
     resume_service = ResumeService(
         upload_directory=Path(settings.resume_upload_directory),
@@ -170,16 +166,10 @@ def build_container(settings: Settings) -> ApplicationContainer:
     user_repository = UserRepository(settings.database_url)
     jwt_service = JwtService(settings.jwt_secret, settings.jwt_access_token_minutes)
     resume_parser = (
-        ResumeLlmParser(
-            api_key=None,
-            model=settings.openai_model,
-            timeout_seconds=settings.llm_timeout_seconds,
-            client_factory=client_factory,
-        )
-        if settings.llm_provider == "openai" and openai_runtime_available
+        UserLlmRuntime(user_llm_credential_service, settings.llm_timeout_seconds)
+        if user_llm_credential_service is not None
         else None
     )
-
     transcriber: SpeechTranscriber
     groq_runtime_available = bool(groq_key) or credential_repository is not None
     if settings.speech_provider == "groq" and groq_runtime_available:
@@ -338,12 +328,12 @@ def create_application(settings: Settings | None = None) -> FastAPI:
     ) -> dict[str, object]:
         user_id = require_user_id(authorization, container.jwt_service)
         if container.resume_parser is None:
-            return {"error": "openai_parser_unavailable"}
+            return {"error": "llm_configuration_required"}
         try:
             profile = await container.resume_service.parse_profile(
                 user_id, container.resume_parser
             )
-        except (ValueError, CredentialResolutionError) as error:
+        except (ValueError, LlmStreamError, CredentialResolutionError) as error:
             return {"error": str(error)}
         await container.profile_repository.save(user_id, profile)
         await container.resume_service.discard_upload(user_id)
@@ -368,6 +358,7 @@ def create_application(settings: Settings | None = None) -> FastAPI:
             container.settings.auto_respond_to_speech,
             container.settings.console_transcript_logging,
             container.system_audio_capture_factory,
+            container.jwt_service,
         ),
     )
     return application

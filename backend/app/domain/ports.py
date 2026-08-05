@@ -34,6 +34,13 @@ class SessionRepository(Protocol):
         """Discard an ended session."""
 
 
+class ResumeProfileParser(Protocol):
+    """Parses extracted resume text using an authenticated user's LLM."""
+
+    async def parse(self, user_id: str, resume_text: str) -> dict[str, object]:
+        """Return a flexible profile grounded only in the supplied resume."""
+
+
 class ScreenAnalyzer(Protocol):
     """Extracts text blocks from a user-authorized screen capture."""
 

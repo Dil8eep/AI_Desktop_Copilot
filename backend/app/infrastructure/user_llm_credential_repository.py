@@ -179,6 +179,25 @@ class UserLlmCredentialRepository:
         finally:
             await connection.close()
 
+    async def active_material(self, user_id: str) -> dict[str, Any] | None:
+        """Load encrypted active material for server-side runtime resolution."""
+        import asyncpg  # type: ignore[import-untyped]
+
+        connection = await asyncpg.connect(self._url)
+        try:
+            await self._ensure_schema(connection)
+            row = await connection.fetchrow(
+                """
+                SELECT id, provider, model, ciphertext, nonce
+                FROM user_llm_credentials
+                WHERE user_id=$1 AND status='active'
+                """,
+                uuid.UUID(user_id),
+            )
+            return dict(row) if row is not None else None
+        finally:
+            await connection.close()
+
     async def retire_active(self, user_id: str) -> bool:
         import asyncpg  # type: ignore[import-untyped]
 

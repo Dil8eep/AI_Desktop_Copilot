@@ -28,7 +28,7 @@ describe("BackendSocketClient", () => {
     );
   });
 
-  it("keeps the token in the main process and forwards streaming events", async () => {
+  it("keeps authentication tokens in the main process and forwards streaming events", async () => {
     const server = new WebSocketServer({ port: 0 });
     servers.push(server);
     await once(server, "listening");
@@ -40,6 +40,7 @@ describe("BackendSocketClient", () => {
     const receivedCommand = waitFor<Record<string, unknown>>((resolve) => {
       server.on("connection", (socket, request) => {
         expect(request.headers["x-copilot-token"]).toBe("test-token");
+        expect(request.headers.authorization).toBe("Bearer user-jwt");
         socket.on("message", (raw) => {
           const command = JSON.parse(raw.toString()) as Record<string, unknown>;
           resolve(command);
@@ -76,6 +77,7 @@ describe("BackendSocketClient", () => {
       });
     });
 
+    client.setAccessToken("user-jwt");
     client.start();
     await connected;
     const sessionId = client.startSession("Test the stream");

@@ -16,6 +16,7 @@ dependencies = [
   "numpy>=2.0,<3.0",
   "liteparse>=2.10,<3.0",
   "openai>=1.0,<3.0",
+  "ollama>=0.6,<1.0",
   "pypdf>=5.0,<6.0",
   "python-multipart>=0.0.20,<1.0",
   "silero-vad>=5.1,<6.0",

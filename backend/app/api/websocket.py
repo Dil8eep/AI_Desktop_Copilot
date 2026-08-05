@@ -16,6 +16,7 @@ from app.domain.ports import (
     SystemAudioCapture,
 )
 from app.domain.protocol import EventEnvelope
+from app.infrastructure.auth_service import JwtService
 from app.infrastructure.wasapi_loopback_capture import SystemAudioCaptureError
 
 _MAX_IMAGE_BYTES = 10 * 1024 * 1024
@@ -64,6 +65,7 @@ def create_websocket_endpoint(
     automatic_responses_enabled: bool,
     console_transcript_logging: bool,
     system_audio_capture_factory: Callable[[], SystemAudioCapture],
+    jwt_service: JwtService | None = None,
 ) -> Callable[[WebSocket], Awaitable[None]]:
     """Create an authenticated endpoint with per-connection task ownership."""
 
@@ -71,6 +73,17 @@ def create_websocket_endpoint(
         if websocket.headers.get("x-copilot-token") != expected_token:
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
             return
+        user_id: str | None = None
+        if jwt_service is not None:
+            authorization = websocket.headers.get("authorization", "")
+            if not authorization.startswith("Bearer "):
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                return
+            try:
+                user_id = jwt_service.verify_access_token(authorization[7:])
+            except Exception:
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                return
 
         await websocket.accept()
         connection_session_id = uuid4()
@@ -98,7 +111,7 @@ def create_websocket_endpoint(
             ai_output_started = False
             try:
                 async for response in session_service.stream(
-                    event, context.get_screen_image()
+                    event, context.get_screen_image(), user_id
                 ):
                     if (
                         console_transcript_logging

@@ -13,7 +13,8 @@ class RecordingParser:
     def __init__(self) -> None:
         self.texts: list[str] = []
 
-    async def parse(self, text: str) -> dict[str, object]:
+    async def parse(self, user_id: str, text: str) -> dict[str, object]:
+        del user_id
         self.texts.append(text)
         return {"summary": text}
 

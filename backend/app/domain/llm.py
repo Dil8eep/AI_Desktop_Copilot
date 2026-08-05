@@ -10,6 +10,7 @@ class LlmRequest:
 
     session_id: UUID
     prompt: str
+    user_id: str | None = None
     image_bytes: bytes | None = None
     image_mime_type: str | None = None
 

@@ -27,9 +27,7 @@ class ResumeService:
         self._latest_uploads: dict[str, ResumeUpload] = {}
         self._upload_lock = asyncio.Lock()
 
-    async def upload(
-        self, user_id: str, filename: str, content: bytes
-    ) -> ResumeUpload:
+    async def upload(self, user_id: str, filename: str, content: bytes) -> ResumeUpload:
         normalized_user_id = str(UUID(user_id))
         safe_name = Path(filename).name
         if not safe_name.lower().endswith(".pdf"):
@@ -61,11 +59,9 @@ class ResumeService:
             raise ValueError("resume_upload_required")
         return await asyncio.to_thread(self._parse_sync, Path(upload.path))
 
-    async def parse_profile(
-        self, user_id: str, parser: Any
-    ) -> dict[str, object]:
+    async def parse_profile(self, user_id: str, parser: Any) -> dict[str, object]:
         text = await self.parse_latest(user_id)
-        profile = await parser.parse(text)
+        profile = await parser.parse(user_id, text)
         if not isinstance(profile, dict):
             raise ValueError("resume_profile_invalid_json")
         return profile

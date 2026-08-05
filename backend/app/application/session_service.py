@@ -36,6 +36,7 @@ class SessionService:
         self,
         event: EventEnvelope,
         screen_image: tuple[bytes, str] | None = None,
+        user_id: str | None = None,
     ) -> AsyncIterator[EventEnvelope]:
         """Yield token events and one terminal event for a start command."""
 
@@ -57,6 +58,7 @@ class SessionService:
             request = LlmRequest(
                 session_id=event.session_id,
                 prompt=command.prompt,
+                user_id=user_id,
                 image_bytes=image_bytes,
                 image_mime_type=image_mime_type,
             )
@@ -74,9 +76,16 @@ class SessionService:
                 )
             if session.cancellation_requested.is_set():
                 reason = "cancelled"
-        except LlmStreamError:
+        except LlmStreamError as error:
             reason = "failed"
-            yield self._error(event, "llm_stream_failed")
+            code = str(error)
+            safe_codes = {
+                "llm_configuration_required",
+                "provider_model_image_not_supported",
+            }
+            yield self._error(
+                event, code if code in safe_codes else "llm_stream_failed"
+            )
         finally:
             await self._sessions.remove(event.session_id)
 

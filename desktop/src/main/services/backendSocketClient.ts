@@ -34,6 +34,7 @@ export class BackendSocketClient {
   private socket: WebSocket | undefined;
   private reconnectTimer: NodeJS.Timeout | undefined;
   private reconnectEnabled = false;
+  private accessToken: string | undefined;
   private latestScreenText = "";
   private candidateProfile: CandidateProfileContext | undefined;
   private status: BackendConnectionStatus = "disconnected";
@@ -58,6 +59,20 @@ export class BackendSocketClient {
     this.publishStatus("disconnected");
   }
 
+  public setAccessToken(accessToken: string | null): void {
+    const normalized = accessToken?.trim() || undefined;
+    if (this.accessToken === normalized) {
+      return;
+    }
+    this.accessToken = normalized;
+    if (this.socket) {
+      this.socket.close();
+      return;
+    }
+    if (this.reconnectEnabled) {
+      this.connect();
+    }
+  }
   public getStatus(): BackendConnectionStatus {
     return this.status;
   }
@@ -186,12 +201,15 @@ export class BackendSocketClient {
     this.socket.send(data);
   }
   private connect(): void {
-    if (!this.reconnectEnabled || this.socket) {
+    if (!this.reconnectEnabled || !this.accessToken || this.socket) {
       return;
     }
     this.publishStatus("connecting");
     const socket = new WebSocket(this.options.url, {
-      headers: { "x-copilot-token": this.options.localToken },
+      headers: {
+        "x-copilot-token": this.options.localToken,
+        ...(this.accessToken ? { Authorization: `Bearer ${this.accessToken}` } : {}),
+      },
     });
     this.socket = socket;
 

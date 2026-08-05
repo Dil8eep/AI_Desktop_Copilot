@@ -12,6 +12,7 @@ from app.application.context_service import ContextService
 from app.application.session_service import SessionService
 from app.domain.llm import LlmDelta, LlmRequest
 from app.domain.protocol import EventEnvelope
+from app.infrastructure.auth_service import JwtService
 from app.infrastructure.in_memory_session_repository import InMemorySessionRepository
 
 
@@ -73,6 +74,8 @@ class UnusedSystemAudioCapture:
 def test_screen_capture_solves_even_when_speech_auto_response_is_disabled() -> None:
     streamer = RecordingLlmStreamer()
     application = FastAPI()
+    user_id = str(uuid4())
+    jwt_service = JwtService("screen-test-secret-that-is-over-32-bytes", 15)
     application.add_api_websocket_route(
         "/ws",
         create_websocket_endpoint(
@@ -84,6 +87,7 @@ def test_screen_capture_solves_even_when_speech_auto_response_is_disabled() -> N
             False,
             False,
             UnusedSystemAudioCapture,
+            jwt_service,
         ),
     )
     session_id = str(uuid4())
@@ -91,7 +95,11 @@ def test_screen_capture_solves_even_when_speech_auto_response_is_disabled() -> N
 
     with TestClient(application) as client:
         with client.websocket_connect(
-            "/ws", headers={"x-copilot-token": "test-token"}
+            "/ws",
+            headers={
+                "x-copilot-token": "test-token",
+                "authorization": f"Bearer {jwt_service.issue_access_token(user_id)}",
+            },
         ) as websocket:
             assert websocket.receive_json()["event"] == "system.ready"
             websocket.send_json(
@@ -118,5 +126,6 @@ def test_screen_capture_solves_even_when_speech_auto_response_is_disabled() -> N
     request = streamer.requests[0]
     assert "Multiple choice" in request.prompt
     assert "without waiting for another user message" in request.prompt
+    assert request.user_id == user_id
     assert request.image_bytes == b"img"
     assert request.image_mime_type == "image/png"
