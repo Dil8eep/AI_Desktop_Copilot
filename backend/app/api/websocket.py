@@ -1,6 +1,7 @@
 """FastAPI adapter for concurrent, versioned desktop WebSocket sessions."""
 
 import asyncio
+import logging
 from collections.abc import Awaitable, Callable
 from uuid import UUID, uuid4
 
@@ -23,6 +24,8 @@ _MAX_IMAGE_BYTES = 10 * 1024 * 1024
 _MAX_AUDIO_CHUNK_BYTES = 64 * 1024
 _IMAGE_MIME_TYPES = {"image/jpeg", "image/png"}
 _AUDIO_MIME_TYPE = "audio/pcm;codec=s16le"
+
+logger = logging.getLogger(__name__)
 
 
 def _error_event(
@@ -71,17 +74,22 @@ def create_websocket_endpoint(
 
     async def websocket_endpoint(websocket: WebSocket) -> None:
         if websocket.headers.get("x-copilot-token") != expected_token:
+            logger.warning("WebSocket rejected: local authentication token mismatch")
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
             return
         user_id: str | None = None
         if jwt_service is not None:
             authorization = websocket.headers.get("authorization", "")
             if not authorization.startswith("Bearer "):
+                logger.warning("WebSocket rejected: user access token is missing")
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                 return
             try:
                 user_id = jwt_service.verify_access_token(authorization[7:])
             except Exception:
+                logger.warning(
+                    "WebSocket rejected: user access token is invalid or expired"
+                )
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                 return
 
