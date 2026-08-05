@@ -9,6 +9,7 @@ export type DesktopRuntimeConfig = Readonly<{
 }>;
 
 const LOCAL_API_URL = "http://127.0.0.1:8765";
+const PRODUCTION_API_URL = "https://ai-desktop-copilot-api.onrender.com";
 
 const parseEnvironment = (
   value: string | undefined,
@@ -82,7 +83,8 @@ export const resolveDesktopRuntimeConfig = (
     packaged,
   );
   const apiBaseUrl = normalizeApiUrl(
-    environmentVariables.COPILOT_API_BASE_URL ?? LOCAL_API_URL,
+    environmentVariables.COPILOT_API_BASE_URL ??
+      (environment === "production" ? PRODUCTION_API_URL : LOCAL_API_URL),
   );
   const websocketUrl = normalizeWebSocketUrl(
     environmentVariables.COPILOT_WS_URL ?? deriveWebSocketUrl(apiBaseUrl),

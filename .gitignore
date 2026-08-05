@@ -32,3 +32,4 @@ pytest-cache-files-*/
 *.tsbuildinfo
 *.egg-info/
 release/
+backend/build/

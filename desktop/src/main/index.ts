@@ -451,6 +451,19 @@ const createTray = (runtime: DesktopRuntime): Tray => {
 
 const bootstrap = async (): Promise<void> => {
   const config = resolveDesktopRuntimeConfig(process.env, app.isPackaged);
+  const localHelperLaunch = resolveLocalHelperLaunch(
+    app.getAppPath(),
+    process.resourcesPath,
+    app.isPackaged,
+    process.env,
+  );
+  if (app.isPackaged && process.argv.includes("--release-smoke-test")) {
+    const helper = new LocalCaptureHelperClient(localHelperLaunch, () => undefined);
+    await helper.start();
+    await helper.shutdown();
+    app.quit();
+    return;
+  }
   const windows = createWindows();
   const backend = new BackendSocketClient({
     url: config.websocketUrl,
@@ -462,12 +475,7 @@ const bootstrap = async (): Promise<void> => {
   });
   const runtimeHolder: { current?: DesktopRuntime } = {};
   const localHelper = new LocalCaptureHelperClient(
-    resolveLocalHelperLaunch(
-      app.getAppPath(),
-      process.resourcesPath,
-      app.isPackaged,
-      process.env,
-    ),
+    localHelperLaunch,
     (sessionId, audio, sampleRateHz) => {
       backend.sendAudioChunk(sessionId, audio, sampleRateHz, "system-audio");
     },

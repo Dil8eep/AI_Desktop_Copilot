@@ -10,6 +10,14 @@ describe("desktop runtime configuration", () => {
     });
   });
 
+  it("uses the hosted Render endpoint in a package without environment variables", () => {
+    expect(resolveDesktopRuntimeConfig({}, true)).toEqual({
+      environment: "production",
+      apiBaseUrl: "https://ai-desktop-copilot-api.onrender.com",
+      websocketUrl: "wss://ai-desktop-copilot-api.onrender.com/ws",
+    });
+  });
+
   it("derives a secure Render WebSocket endpoint", () => {
     expect(
       resolveDesktopRuntimeConfig(

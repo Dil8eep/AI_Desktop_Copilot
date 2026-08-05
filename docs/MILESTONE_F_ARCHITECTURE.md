@@ -126,7 +126,7 @@ Use `electron-builder` with NSIS:
 - Route system audio through local PCM chunks.
 - Preserve explicit capture controls, overlay lifecycle, and Mock Interview/Meeting behavior.
 
-### F4 -- Installer and release artifact
+### F4 -- Installer and release artifact (implemented)
 
 - Add NSIS/electron-builder configuration, icons, packaged endpoint defaults, and helper resources.
 - Produce an unsigned test installer and unpacked artifact.
