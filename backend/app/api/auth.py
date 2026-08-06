@@ -14,6 +14,17 @@ class Credentials(BaseModel):
     password: str
 
 
+class RefreshRequest(BaseModel):
+    refreshToken: str
+
+
+def _tokens(jwt_service: JwtService, user_id: str) -> dict[str, str]:
+    return {
+        "accessToken": jwt_service.issue_access_token(user_id),
+        "refreshToken": jwt_service.issue_refresh_token(user_id),
+    }
+
+
 def create_auth_router(users: UserRepository, jwt_service: JwtService) -> APIRouter:
     router = APIRouter(prefix="/api/auth")
 
@@ -33,7 +44,7 @@ def create_auth_router(users: UserRepository, jwt_service: JwtService) -> APIRou
             {
                 "userId": user_id,
                 "role": "user",
-                "accessToken": jwt_service.issue_access_token(user_id),
+                **_tokens(jwt_service, user_id),
             },
             status_code=201,
         )
@@ -54,9 +65,20 @@ def create_auth_router(users: UserRepository, jwt_service: JwtService) -> APIRou
             {
                 "userId": user_id,
                 "role": str(user["role"]),
-                "accessToken": jwt_service.issue_access_token(user_id),
+                **_tokens(jwt_service, user_id),
             }
         )
+
+    @router.post("/refresh")
+    async def refresh(request: RefreshRequest) -> JSONResponse:
+        try:
+            user_id = jwt_service.verify_refresh_token(request.refreshToken)
+            user = await users.find_by_id(user_id)
+        except Exception:
+            return JSONResponse({"error": "invalid_refresh_token"}, status_code=401)
+        if user is None:
+            return JSONResponse({"error": "invalid_refresh_token"}, status_code=401)
+        return JSONResponse(_tokens(jwt_service, user_id))
 
     @router.get("/me")
     async def me(

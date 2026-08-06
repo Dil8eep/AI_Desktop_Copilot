@@ -51,6 +51,22 @@ class RecordingRuntime(UserLlmRuntime):
         yield LlmDelta("ok")
 
 
+class SequencedParseRuntime(UserLlmRuntime):
+    def __init__(self, responses: list[str]) -> None:
+        super().__init__(FakeCredentials("openai"), 5)  # type: ignore[arg-type]
+        self.responses = responses
+        self.prompts: list[str] = []
+
+    async def stream(
+        self, request: LlmRequest, cancellation_requested: asyncio.Event
+    ) -> AsyncIterator[LlmDelta]:
+        del cancellation_requested
+        self.prompts.append(request.prompt)
+        response = self.responses.pop(0)
+        if response:
+            yield LlmDelta(response)
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "provider", ["openai", "groq", "openrouter", "gemini", "ollama_cloud"]
@@ -94,3 +110,22 @@ async def test_requires_user_and_uses_ocr_text_for_text_only_provider() -> None:
     assert routed.prompt == "solve"
     assert routed.image_bytes is None
     assert routed.image_mime_type is None
+
+
+@pytest.mark.asyncio
+async def test_resume_parse_retries_an_empty_response_once() -> None:
+    runtime = SequencedParseRuntime(["", '{"summary": "ready"}'])
+
+    profile = await runtime.parse("verified-user", "resume text")
+
+    assert profile == {"summary": "ready"}
+    assert len(runtime.prompts) == 2
+    assert "previous response was empty or invalid" in runtime.prompts[1]
+
+
+@pytest.mark.asyncio
+async def test_resume_parse_returns_stable_error_after_invalid_responses() -> None:
+    runtime = SequencedParseRuntime(["not-json", "still-not-json"])
+
+    with pytest.raises(ValueError, match="resume_profile_invalid_json"):
+        await runtime.parse("verified-user", "resume text")

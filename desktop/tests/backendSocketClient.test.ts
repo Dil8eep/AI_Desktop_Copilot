@@ -1,4 +1,6 @@
 import { once } from "node:events";
+import { createServer } from "node:http";
+import { setTimeout as delay } from "node:timers/promises";
 import { afterEach, describe, expect, it } from "vitest";
 import { WebSocketServer } from "ws";
 import { BackendSocketClient } from "../src/main/services/backendSocketClient";
@@ -26,6 +28,37 @@ describe("BackendSocketClient", () => {
     expect(client.sendAudioChunk("session", new Uint8Array([1, 2]), 16_000)).toBe(
       false,
     );
+  });
+
+  it("does not retry after the backend rejects authentication", async () => {
+    let upgradeRequests = 0;
+    const server = createServer();
+    server.on("upgrade", (_request, socket) => {
+      upgradeRequests += 1;
+      socket.end(
+        ["HTTP/1.1 403 Forbidden", "Connection: close", "", ""].join(
+          String.fromCharCode(13, 10),
+        ),
+      );
+    });
+    server.listen(0, "127.0.0.1");
+    await once(server, "listening");
+    const address = server.address();
+    if (typeof address === "string" || address === null) {
+      throw new Error("Expected a TCP test server.");
+    }
+    const client = new BackendSocketClient({
+      url: `ws://127.0.0.1:${address.port}/ws`,
+      reconnectDelayMs: 10,
+    });
+
+    client.setAccessToken("expired-jwt");
+    client.start();
+    await delay(80);
+
+    expect(upgradeRequests).toBe(1);
+    client.shutdown();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
   });
 
   it("keeps authentication tokens in the main process and forwards streaming events", async () => {

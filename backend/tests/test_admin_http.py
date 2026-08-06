@@ -136,4 +136,38 @@ def test_public_signup_always_returns_user_role() -> None:
 
     assert response.status_code == 201
     assert response.json()["role"] == "user"
+    assert response.json()["refreshToken"]
     assert users.created_email == "candidate@example.com"
+
+
+def test_refresh_token_renews_an_access_token() -> None:
+    jwt_service = JwtService("test-secret-that-is-at-least-32-bytes", 15)
+    users = FakeUsers()
+    app = FastAPI()
+    app.include_router(create_auth_router(users, jwt_service))  # type: ignore[arg-type]
+    refresh_token = jwt_service.issue_refresh_token("existing-user")
+
+    response = TestClient(app).post(
+        "/api/auth/refresh", json={"refreshToken": refresh_token}
+    )
+
+    assert response.status_code == 200
+    assert jwt_service.verify_access_token(response.json()["accessToken"]) == (
+        "existing-user"
+    )
+    assert response.json()["refreshToken"] != ""
+
+
+def test_access_token_cannot_be_used_as_refresh_token() -> None:
+    jwt_service = JwtService("test-secret-that-is-at-least-32-bytes", 15)
+    app = FastAPI()
+    app.include_router(
+        create_auth_router(FakeUsers(), jwt_service)  # type: ignore[arg-type]
+    )
+
+    response = TestClient(app).post(
+        "/api/auth/refresh",
+        json={"refreshToken": jwt_service.issue_access_token("existing-user")},
+    )
+
+    assert response.status_code == 401

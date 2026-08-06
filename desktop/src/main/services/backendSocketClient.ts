@@ -35,6 +35,7 @@ export class BackendSocketClient {
   private reconnectTimer: NodeJS.Timeout | undefined;
   private reconnectEnabled = false;
   private accessToken: string | undefined;
+  private authenticationRejected = false;
   private latestScreenText = "";
   private candidateProfile: CandidateProfileContext | undefined;
   private status: BackendConnectionStatus = "disconnected";
@@ -65,6 +66,7 @@ export class BackendSocketClient {
       return;
     }
     this.accessToken = normalized;
+    this.authenticationRejected = false;
     if (this.socket) {
       this.socket.close();
       return;
@@ -200,7 +202,12 @@ export class BackendSocketClient {
     this.socket.send(data);
   }
   private connect(): void {
-    if (!this.reconnectEnabled || !this.accessToken || this.socket) {
+    if (
+      !this.reconnectEnabled ||
+      !this.accessToken ||
+      this.authenticationRejected ||
+      this.socket
+    ) {
       return;
     }
     this.publishStatus("connecting");
@@ -214,20 +221,34 @@ export class BackendSocketClient {
     });
     this.socket = socket;
 
+    socket.on("unexpected-response", (_request, response) => {
+      if (response.statusCode === 401 || response.statusCode === 403) {
+        this.authenticationRejected = true;
+      }
+      response.resume();
+    });
+
     socket.on("open", () => {
       if (this.socket === socket) {
         this.publishStatus("connected");
       }
     });
     socket.on("message", (data: RawData) => this.handleMessage(data));
-    socket.on("error", () => this.publishStatus("disconnected"));
+    socket.on("error", (error) => {
+      if (/Unexpected server response: (401|403)/.test(error.message)) {
+        this.authenticationRejected = true;
+      }
+      this.publishStatus("disconnected");
+    });
     socket.on("close", () => {
       if (this.socket !== socket) {
         return;
       }
       this.socket = undefined;
       this.publishStatus("disconnected");
-      this.scheduleReconnect();
+      if (!this.authenticationRejected) {
+        this.scheduleReconnect();
+      }
     });
   }
 

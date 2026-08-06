@@ -23,9 +23,12 @@ class PasswordService:
 class JwtService:
     """Issue and validate signed HS256 JWT access tokens."""
 
-    def __init__(self, secret: str, access_minutes: int) -> None:
+    def __init__(
+        self, secret: str, access_minutes: int, refresh_days: int = 30
+    ) -> None:
         self._secret = secret
         self._access_minutes = access_minutes
+        self._refresh_days = refresh_days
 
     def issue_access_token(self, user_id: str) -> str:
         import jwt
@@ -38,6 +41,26 @@ class JwtService:
             "exp": now + timedelta(minutes=self._access_minutes),
         }
         return str(jwt.encode(payload, self._secret, algorithm="HS256"))
+
+    def issue_refresh_token(self, user_id: str) -> str:
+        import jwt
+
+        now = datetime.now(UTC)
+        payload: dict[str, Any] = {
+            "sub": user_id,
+            "type": "refresh",
+            "iat": now,
+            "exp": now + timedelta(days=self._refresh_days),
+        }
+        return str(jwt.encode(payload, self._secret, algorithm="HS256"))
+
+    def verify_refresh_token(self, token: str) -> str:
+        import jwt
+
+        payload = jwt.decode(token, self._secret, algorithms=["HS256"])
+        if payload.get("type") != "refresh" or not isinstance(payload.get("sub"), str):
+            raise ValueError("invalid_refresh_token")
+        return str(payload["sub"])
 
     def verify_access_token(self, token: str) -> str:
         import jwt

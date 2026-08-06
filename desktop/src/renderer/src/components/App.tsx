@@ -180,6 +180,7 @@ export const App = (): ReactElement => {
   const [authMode, setAuthMode] = useState<AuthMode>("login");
   const [view, setView] = useState<View>("dashboard");
   const [accessToken, setAccessToken] = useState("");
+  const [refreshToken, setRefreshToken] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -278,6 +279,33 @@ export const App = (): ReactElement => {
     void window.desktopApi.setAccessToken(accessToken || null);
   }, [accessToken]);
   useEffect(() => {
+    if (!refreshToken || !apiBaseUrl) return;
+    const refreshAccessToken = async (): Promise<void> => {
+      try {
+        const response = await fetch(`${apiBaseUrl}/api/auth/refresh`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ refreshToken }),
+        });
+        const result = (await response.json()) as {
+          accessToken?: string;
+          refreshToken?: string;
+        };
+        if (!response.ok || !result.accessToken || !result.refreshToken) {
+          throw new Error("refresh_failed");
+        }
+        setAccessToken(result.accessToken);
+        setRefreshToken(result.refreshToken);
+      } catch {
+        setAccessToken("");
+        setRefreshToken("");
+        setMessage("Your session expired. Please sign in again.");
+      }
+    };
+    const timer = window.setInterval(() => void refreshAccessToken(), 10 * 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, [refreshToken, apiBaseUrl]);
+  useEffect(() => {
     if (!accessToken || !apiBaseUrl) return;
     const controller = new AbortController();
     setMessage("Signed in. Loading your saved workspace...");
@@ -323,12 +351,14 @@ export const App = (): ReactElement => {
       });
       const result = (await response.json()) as {
         accessToken?: string;
+        refreshToken?: string;
         error?: string;
       };
-      if (!response.ok || !result.accessToken) {
+      if (!response.ok || !result.accessToken || !result.refreshToken) {
         throw new Error(result.error ?? "Authentication failed.");
       }
       setAccessToken(result.accessToken);
+      setRefreshToken(result.refreshToken);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Authentication failed.");
     } finally {
@@ -446,7 +476,22 @@ export const App = (): ReactElement => {
         profile?: Record<string, unknown>;
       };
       if (!parse.ok || !parsed.profile) {
-        throw new Error(parsed.error ?? "Resume parsing failed.");
+        if (parse.status === 401) {
+          setAccessToken("");
+          setRefreshToken("");
+          throw new Error("Your session expired. Please sign in again.");
+        }
+        const parsingMessages: Record<string, string> = {
+          resume_profile_empty_response:
+            "The selected model returned an empty resume profile. Try again or choose another model.",
+          resume_profile_invalid_json:
+            "The selected model did not return a valid resume profile. Try again or choose another model.",
+        };
+        throw new Error(
+          (parsed.error && parsingMessages[parsed.error]) ??
+            parsed.error ??
+            "Resume parsing failed.",
+        );
       }
       const sessionProfile = {
         session_preferences: {
@@ -593,6 +638,7 @@ export const App = (): ReactElement => {
           className="nav-item logout"
           onClick={() => {
             setAccessToken("");
+            setRefreshToken("");
             setPassword("");
             setCandidateProfile(null);
             setProfilePrepared(false);

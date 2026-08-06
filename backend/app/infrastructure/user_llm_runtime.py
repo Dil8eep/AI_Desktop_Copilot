@@ -87,18 +87,36 @@ class UserLlmRuntime:
 
     async def parse(self, user_id: str, resume_text: str) -> dict[str, Any]:
         prompt = self._resume_prompt(resume_text)
-        parts: list[str] = []
-        request = LlmRequest(session_id=uuid4(), prompt=prompt, user_id=user_id)
-        async for delta in self.stream(request, asyncio.Event()):
-            parts.append(delta.text)
-        raw = "".join(parts).strip()
-        if raw.startswith("```"):
-            raw = raw.removeprefix("```json").removeprefix("```")
-            raw = raw.removesuffix("```").strip()
-        parsed = json.loads(raw)
-        if not isinstance(parsed, dict):
-            raise ValueError("resume_profile_invalid_json")
-        return parsed
+        last_error = "resume_profile_empty_response"
+        for attempt in range(2):
+            attempt_prompt = prompt
+            if attempt:
+                attempt_prompt += (
+                    "\n\nYour previous response was empty or invalid. Return exactly "
+                    "one valid JSON object now, with no explanation or code fence."
+                )
+            parts: list[str] = []
+            request = LlmRequest(
+                session_id=uuid4(), prompt=attempt_prompt, user_id=user_id
+            )
+            async for delta in self.stream(request, asyncio.Event()):
+                parts.append(delta.text)
+            raw = "".join(parts).strip()
+            if not raw:
+                last_error = "resume_profile_empty_response"
+                continue
+            if raw.startswith("```"):
+                raw = raw.removeprefix("```json").removeprefix("```")
+                raw = raw.removesuffix("```").strip()
+            try:
+                parsed = json.loads(raw)
+            except json.JSONDecodeError:
+                last_error = "resume_profile_invalid_json"
+                continue
+            if isinstance(parsed, dict):
+                return parsed
+            last_error = "resume_profile_invalid_json"
+        raise ValueError(last_error)
 
     async def _stream_openai(
         self,

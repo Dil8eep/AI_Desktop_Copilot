@@ -164,7 +164,11 @@ def build_container(settings: Settings) -> ApplicationContainer:
     profile_repository = ProfileRepository(settings.database_url)
     admin_repository = AdminRepository(settings.database_url)
     user_repository = UserRepository(settings.database_url)
-    jwt_service = JwtService(settings.jwt_secret, settings.jwt_access_token_minutes)
+    jwt_service = JwtService(
+        settings.jwt_secret,
+        settings.jwt_access_token_minutes,
+        settings.jwt_refresh_token_days,
+    )
     resume_parser = (
         UserLlmRuntime(user_llm_credential_service, settings.llm_timeout_seconds)
         if user_llm_credential_service is not None
@@ -325,19 +329,21 @@ def create_application(settings: Settings | None = None) -> FastAPI:
     @application.post("/api/resume/parse")
     async def parse_resume(
         authorization: str | None = Header(default=None),
-    ) -> dict[str, object]:
+    ) -> JSONResponse:
         user_id = require_user_id(authorization, container.jwt_service)
         if container.resume_parser is None:
-            return {"error": "llm_configuration_required"}
+            return JSONResponse(
+                {"error": "llm_configuration_required"}, status_code=422
+            )
         try:
             profile = await container.resume_service.parse_profile(
                 user_id, container.resume_parser
             )
         except (ValueError, LlmStreamError, CredentialResolutionError) as error:
-            return {"error": str(error)}
+            return JSONResponse({"error": str(error)}, status_code=422)
         await container.profile_repository.save(user_id, profile)
         await container.resume_service.discard_upload(user_id)
-        return {"status": "parsed", "profile": profile}
+        return JSONResponse({"status": "parsed", "profile": profile})
 
     @application.get("/api/profile")
     async def get_profile(
