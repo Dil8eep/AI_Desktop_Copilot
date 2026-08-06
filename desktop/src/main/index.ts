@@ -449,20 +449,32 @@ const createTray = (runtime: DesktopRuntime): Tray => {
   return tray;
 };
 
+const waitForRenderedDashboard = async (window: BrowserWindow): Promise<void> => {
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const rendered = await window.webContents.executeJavaScript(
+      "Boolean(document.querySelector('#root')?.childElementCount && document.body.innerText.trim().length > 20)",
+    );
+    if (rendered === true) return;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error("Packaged Dashboard renderer did not mount.");
+};
+
 const bootstrap = async (): Promise<void> => {
   const config = resolveDesktopRuntimeConfig(process.env, app.isPackaged);
+  Menu.setApplicationMenu(null);
   const localHelperLaunch = resolveLocalHelperLaunch(
     app.getAppPath(),
     process.resourcesPath,
     app.isPackaged,
     process.env,
   );
-  if (app.isPackaged && process.argv.includes("--release-smoke-test")) {
+  const releaseSmokeTest =
+    app.isPackaged && process.argv.includes("--release-smoke-test");
+  if (releaseSmokeTest) {
     const helper = new LocalCaptureHelperClient(localHelperLaunch, () => undefined);
     await helper.start();
     await helper.shutdown();
-    app.quit();
-    return;
   }
   const windows = createWindows();
   const backend = new BackendSocketClient({
@@ -485,6 +497,14 @@ const bootstrap = async (): Promise<void> => {
   runtimeHolder.current = runtime;
   registerIpc(runtime, config);
   await loadWindows(windows);
+  if (releaseSmokeTest) {
+    await waitForRenderedDashboard(windows.settings);
+    await runtime.shutdown();
+    windows.settings.destroy();
+    windows.overlay.destroy();
+    app.quit();
+    return;
+  }
   const tray = createTray(runtime);
   runtime.start();
 
@@ -516,5 +536,6 @@ app
   .then(bootstrap)
   .catch((error: unknown) => {
     console.error("Desktop startup failed", error);
+    process.exitCode = 1;
     app.quit();
   });

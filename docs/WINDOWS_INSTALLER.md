@@ -29,15 +29,15 @@ Generated release files are intentionally ignored by Git:
 
 ```text
 desktop/release/win-unpacked/
-desktop/release/AI-Desktop-Copilot-Setup-0.1.0-x64.exe
-desktop/release/AI-Desktop-Copilot-Setup-0.1.0-x64.exe.blockmap
+desktop/release/AI-Desktop-Copilot-Setup-0.1.1-x64.exe
+desktop/release/AI-Desktop-Copilot-Setup-0.1.1-x64.exe.blockmap
 ```
 
 The installer is approximately 118 MiB. The packaged helper is stored at `resources/local-helper/copilot-local-helper.exe`, outside `app.asar`, and includes Python 3.12, LiteParse, and PyAudioWPatch runtime components.
 
 ## Installation on another laptop
 
-1. Copy `AI-Desktop-Copilot-Setup-0.1.0-x64.exe` to the Windows x64 laptop.
+1. Copy `AI-Desktop-Copilot-Setup-0.1.1-x64.exe` to the Windows x64 laptop.
 2. Run the installer and choose the per-user installation directory.
 3. Because this private build is unsigned, Windows SmartScreen may display an unknown-publisher warning. Review the filename and source before choosing to continue.
 4. Launch **AI Desktop Copilot** from the Start Menu or desktop shortcut.
@@ -81,3 +81,8 @@ These hardware, account, and second-device checks cannot be proven by a build-on
 ## Current distribution boundary
 
 This is an unsigned private test installer. Milestone F5 is required for code signing, release checksums, update hosting, and optional device registration/revocation.
+## Blank window correction
+
+Version `0.1.0` used drive-root `/assets/...` URLs that work in the Vite development server but fail from an installed `file://` page. Version `0.1.1` uses relative `./assets/...` URLs, removes the default Electron menu bar, and adds both a static asset-path gate and an installed Dashboard mount test.
+
+Do not redistribute the `0.1.0` installer. Uninstall it and install `AI-Desktop-Copilot-Setup-0.1.1-x64.exe`.

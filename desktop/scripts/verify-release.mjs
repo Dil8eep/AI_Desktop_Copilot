@@ -4,6 +4,9 @@ import { spawn } from "node:child_process";
 
 const desktopDirectory = path.resolve(import.meta.dirname, "..");
 const releaseDirectory = path.join(desktopDirectory, "release");
+const packageManifest = JSON.parse(
+  await readFile(path.join(desktopDirectory, "package.json"), "utf8"),
+);
 const unpackedDirectory = path.join(releaseDirectory, "win-unpacked");
 const appExecutable = path.join(unpackedDirectory, "AI Desktop Copilot.exe");
 const appArchive = path.join(unpackedDirectory, "resources", "app.asar");
@@ -13,7 +16,10 @@ const helperExecutable = path.join(
   "local-helper",
   "copilot-local-helper.exe",
 );
-const installer = path.join(releaseDirectory, "AI-Desktop-Copilot-Setup-0.1.0-x64.exe");
+const installer = path.join(
+  releaseDirectory,
+  `AI-Desktop-Copilot-Setup-${packageManifest.version}-x64.exe`,
+);
 
 const requireFile = async (filePath) => {
   await access(filePath);
