@@ -228,9 +228,43 @@ class UserLlmRuntime:
     @staticmethod
     def _resume_prompt(resume_text: str) -> str:
         return (
-            "Extract this resume into valid JSON. Detect headings dynamically and "
-            "preserve all meaningful information. Use candidate, sections, "
-            "additional_sections, and summary. Normalize equivalent headings. "
-            "Do not invent values. Return JSON only, without markdown.\n\n"
-            f"Resume text:\n{resume_text}"
+            "Convert the complete resume text below into one valid JSON object.\n\n"
+            "STRICT TOP-LEVEL FORMAT:\n"
+            "{\n"
+            '  "candidate": {},\n'
+            '  "summary": "",\n'
+            '  "sections": {},\n'
+            '  "additional_sections": {}\n'
+            "}\n\n"
+            "RULES:\n"
+            "1. Use exactly these four top-level keys: candidate, summary, "
+            "sections, and additional_sections.\n"
+            "2. Put identity and contact details inside candidate, including all "
+            "available fields such as name, email, phone, location, LinkedIn, "
+            "GitHub, portfolio, or website.\n"
+            "3. Detect every heading in the resume dynamically. Do not rely on a "
+            "fixed list of resume sections.\n"
+            "4. Put recognized resume headings and their complete content inside "
+            "sections. Preserve the detected heading as the JSON key in normalized "
+            "snake_case form.\n"
+            "5. Put uncommon or custom headings inside additional_sections. Never "
+            "place a detected resume heading directly at the top level.\n"
+            "6. Preserve every meaningful fact, including dates, locations, roles, "
+            "companies, responsibilities, technologies, project descriptions, "
+            "qualifications, scores, certifications, achievements, and links.\n"
+            "7. Preserve multiple entries as arrays. Do not merge different jobs, "
+            "projects, qualifications, or certifications.\n"
+            "8. Preserve nested relationships. For example, keep each role with its "
+            "company, duration, location, and responsibilities.\n"
+            "9. Normalize equivalent headings only when their meaning is the same, "
+            "such as work_history to professional_experience.\n"
+            "10. Do not summarize, shorten, omit, or rewrite detailed section "
+            "content. The summary field may be concise, but all original facts must "
+            "remain in the appropriate section.\n"
+            "11. Do not invent or infer information that is absent from the resume.\n"
+            "12. Before responding, verify that every detected heading and every "
+            "meaningful line from the resume is represented in the JSON object.\n"
+            "13. Return JSON only. Do not return Markdown, code fences, explanations, "
+            "comments, or text outside the JSON object.\n\n"
+            f"RESUME TEXT:\n{resume_text}"
         )
